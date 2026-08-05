@@ -7,31 +7,66 @@
     <title>Unity WebGL Player | DOOMORI ETHERNAL</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
+   <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        width: 100%;
+        height: 100vh;
+        overflow: hidden;
+        background-color: #000;
+      }
+      
+      #unity-container {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      #unity-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      
+      #loading-text {
+        color: white;
+        font-size: 48px;
+        font-family: cursive;
+        text-align: center;
+        background-color: rgba(0, 0, 0, 0.8);
+        padding: 20px;
+        border-radius: 10px;
+        position: fixed;
+        z-index: 1000;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        max-width: 90%;
+      }
+      
+      #unity-loading-bar {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 90%;
+        max-width: 400px;
+      }
+    </style>
   </head>
   <body>
-   <div
-  id="loading-text"
-  style="
-    color: white;
-    font-size: 48px;
-    font-family: cursive;
-    text-align: center;
-    margin-top: 20px;
-    background-color: rgba(0, 0, 0, 0.8);
-    padding: 20px;
-    border-radius: 10px;
-    position: relative;
-    z-index: 1000;
-    width: 90%;
-    margin-left: auto;
-    margin-right: auto;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-  "
->
-  LOADING...
-</div>
+    <div id="loading-text">LOADING...</div>
     <div id="unity-container" class="unity-desktop">
-      <canvas id="unity-canvas" width=960 height=600></canvas>
+      <canvas id="unity-canvas"></canvas>
       <div id="unity-loading-bar">
         <div id="unity-logo"></div>
         <div id="unity-progress-bar-empty">
