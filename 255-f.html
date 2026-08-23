@@ -77,13 +77,14 @@
       <button id="startButton">PLAY</button>
     </div>
     <script>
-    alert("To enable mouse support to play the game, click Settings -> Controller Port Devices -> Port 1 -> SNES Mouse. Dismiss this message to continue.");
+    alert("To enable mouse support to play the game, click Settings -> Controller Port Devices -> Port 1 -> SNES Mouse. Accuracy can slightly be enhanced by entering Input Options and setting Lock Mouse from Disabled to Enabled. Dismiss this message to continue.");
       document.getElementById("game").style.display = "none";
       function startGame() {
         document.getElementById("game").style.display = "block";
         document.getElementById("startButton").style.display = "none";
         EJS_player = "#game";
         EJS_core = "snes";
+        EJS_mouse = "true";
         EJS_color = "#000000";
         EJS_startOnLoaded = true;
         EJS_pathtodata = "https://cdn.jsdelivr.net/gh/ap-math-class/emu@master/";
