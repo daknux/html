@@ -9,22 +9,46 @@
             height: 100%;
         }
 
-               /* Custom CSS to adjust layout */
+        /* Custom CSS to adjust layout */
         #playlist {
             background-color: #f8f9fa;
             padding: 15px;
-            max-height: 100vh; 
-            overflow-y: auto; 
+            max-height: 100vh; /* Set a maximum height equal to the viewport height */
+            overflow-y: auto; /* Add a vertical scrollbar when needed */
         }
 
         #videoPlayer {
             width: 100%;
             height: auto;
         }
+        
+          /* Base styling – you can keep your existing Bootstrap classes etc. */
+  #m3uURL {
+    width: 65%;
+    padding: 0.5rem 0.75rem;
+    font-size: 1rem;
+    /* transition for a smooth fade */
+    transition: opacity 0.2s ease-in-out;
+    /* start fully transparent */
+    opacity: 0;
+  }
+
+  /* When the input receives focus, make the text opaque */
+  #m3uURL:focus {
+    opacity: 1;
+    outline: none;               /* optional – remove default focus outline */
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); /* Bootstrap‑like focus ring */
+  }
+
+  /* Keep the placeholder fully visible at all times */
+  #m3uURL::placeholder {
+    opacity: 1;                  /* ensure placeholder isn’t affected by the input’s opacity */
+    color: #6c757d;              /* Bootstrap secondary text color – adjust as needed */
 
         .input-group-btn {
             display: flex;
             align-items: center;
+            color: red;
         }
 
         .btn-go {
@@ -35,12 +59,18 @@
             width: 100px;
         }
 
+        /* Apply subtle glow effect on hover */
         .channel:hover {
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
             transition: box-shadow 0.3s ease-in-out;
+        }
+
+        /* Change cursor to pointer on hover */
+        .channel:hover {
             cursor: pointer;
         }
 
+        /* CSS for the billed message */
         .billed-msg {
             position: fixed;
             bottom: 10px;
@@ -51,6 +81,7 @@
             border-radius: 5px;
         }
 
+        /* Search bar styles */
         .search-bar {
             margin-bottom: 10px;
         }
@@ -61,20 +92,8 @@
             border-radius: 15px;
             margin-top: 5px;
             margin-bottom: 10px;
-            max-width: 100vh; 
-            overflow-x: auto; 
-        }
-
-        /* NEW: M3U Form Hiding Styles */
-        #m3uFormContainer {
-            transition: opacity 0.5s ease, visibility 0.5s;
-            opacity: 1;
-            visibility: visible;
-        }
-
-        #m3uFormContainer.hidden {
-            opacity: 0;
-            visibility: hidden;
+            max-width: 100vh; /* Set a maximum height equal to the viewport height */
+            overflow-x: auto; /* Add a vertical scrollbar when needed */
         }
     </style>
 </head>
@@ -544,4 +563,3 @@ if (savedPlaylistURL) {
     </script>
 </body>
 </html>
-
