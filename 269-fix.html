@@ -9,12 +9,12 @@
             height: 100%;
         }
 
-        /* Custom CSS to adjust layout */
+               /* Custom CSS to adjust layout */
         #playlist {
             background-color: #f8f9fa;
             padding: 15px;
-            max-height: 100vh; /* Set a maximum height equal to the viewport height */
-            overflow-y: auto; /* Add a vertical scrollbar when needed */
+            max-height: 100vh; 
+            overflow-y: auto; 
         }
 
         #videoPlayer {
@@ -27,49 +27,20 @@
             align-items: center;
         }
 
- /* Hide form by default, show on focus */
-    #m3uURL {
-        max-width: 0;
-        opacity: 0;
-        transition: max-width 0.3s ease-in-out, opacity 0.3s ease-in-out;
-        padding: 0;
-        border: none;
-    }
-
-    #m3uURL:focus {
-        max-width: 100%;
-        opacity: 1;
-        padding: 0.375rem 0.75rem;
-        border: 1px solid #ced4da;
-        outline: none;
-    }
-
-    /* Keep button visible but adjust */
-    .input-group-btn {
-        display: flex;
-        align-items: center;
-    }
-
-    .btn-go {
-        margin-left: 10px;
-    }
+        .btn-go {
+            margin-left: 10px;
+        }
 
         .tv-logo {
             width: 100px;
         }
 
-        /* Apply subtle glow effect on hover */
         .channel:hover {
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
             transition: box-shadow 0.3s ease-in-out;
-        }
-
-        /* Change cursor to pointer on hover */
-        .channel:hover {
             cursor: pointer;
         }
 
-        /* CSS for the billed message */
         .billed-msg {
             position: fixed;
             bottom: 10px;
@@ -80,7 +51,6 @@
             border-radius: 5px;
         }
 
-        /* Search bar styles */
         .search-bar {
             margin-bottom: 10px;
         }
@@ -91,8 +61,20 @@
             border-radius: 15px;
             margin-top: 5px;
             margin-bottom: 10px;
-            max-width: 100vh; /* Set a maximum height equal to the viewport height */
-            overflow-x: auto; /* Add a vertical scrollbar when needed */
+            max-width: 100vh; 
+            overflow-x: auto; 
+        }
+
+        /* NEW: M3U Form Hiding Styles */
+        #m3uFormContainer {
+            transition: opacity 0.5s ease, visibility 0.5s;
+            opacity: 1;
+            visibility: visible;
+        }
+
+        #m3uFormContainer.hidden {
+            opacity: 0;
+            visibility: hidden;
         }
     </style>
 </head>
@@ -560,26 +542,6 @@ if (savedPlaylistURL) {
 
 
     </script>
-    <script>
-    const m3uInput = document.getElementById('m3uURL');
-
-    // Hide input on blur (unless it has a value)
-    m3uInput.addEventListener('blur', function() {
-        if (this.value === '') {
-            this.style.maxWidth = '0';
-            this.style.opacity = '0';
-            this.style.padding = '0';
-            this.style.border = 'none';
-        }
-    });
-
-    // Show input on focus
-    m3uInput.addEventListener('focus', function() {
-        this.style.maxWidth = '100%';
-        this.style.opacity = '1';
-        this.style.padding = '0.375rem 0.75rem';
-        this.style.border = '1px solid #ced4da';
-    });
-</script>
 </body>
 </html>
+
