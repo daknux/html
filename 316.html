@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Baldi's Basics 5 Years Birthday Bash</title>
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #unityContainer {
+      position: fixed;
+      inset: 0;
+    }
+
+    #unityContainer canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    .webgl-content {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .webgl-content .logo,
+    .webgl-content .progress {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .webgl-content .logo {
+      width: 154px;
+      height: 130px;
+      background: url("https://media.blooket.com/raw/upload/fvn62emyftxhg9oquyzv.png")
+        no-repeat center / contain;
+    }
+
+    .webgl-content .progress {
+      width: 141px;
+      height: 18px;
+      margin-top: 90px;
+    }
+
+    .webgl-content .progress .empty {
+      float: right;
+      width: 100%;
+      height: 100%;
+      background: url("hhttps://media.blooket.com/raw/upload/znd5js1kowzj7wdmbqap.png")
+        no-repeat right / cover;
+    }
+
+    .webgl-content .progress .full {
+      float: left;
+      width: 0;
+      height: 100%;
+      background: url("https://media.blooket.com/raw/upload/lnhqi5dswsfv8zjve2hj.png")
+        no-repeat left / cover;
+    }
+
+    .webgl-content .logo.Dark {
+      background-image: url("https://media.blooket.com/raw/upload/ztspijxharhrxkoes0ud.png");
+    }
+
+    .webgl-content .progress.Dark .empty {
+      background-image: url("https://media.blooket.com/raw/upload/jlmincq1mq1w6lowmjuy.png");
+    }
+
+    .webgl-content .progress.Dark .full {
+      background-image: url("https://media.blooket.com/raw/upload/byljvg61yocblz7kchbs.png");
+    }
+  </style>
+
+  <script>
+    function UnityProgress(unityInstance, progress) {
+      if (!unityInstance.Module) return;
+
+      if (!unityInstance.logo) {
+        unityInstance.logo = document.createElement("div");
+        unityInstance.logo.className =
+          "logo " + unityInstance.Module.splashScreenStyle;
+
+        unityInstance.container.appendChild(unityInstance.logo);
+      }
+
+      if (!unityInstance.progress) {
+        unityInstance.progress = document.createElement("div");
+        unityInstance.progress.className =
+          "progress " + unityInstance.Module.splashScreenStyle;
+
+        unityInstance.progress.empty = document.createElement("div");
+        unityInstance.progress.empty.className = "empty";
+        unityInstance.progress.appendChild(unityInstance.progress.empty);
+
+        unityInstance.progress.full = document.createElement("div");
+        unityInstance.progress.full.className = "full";
+        unityInstance.progress.appendChild(unityInstance.progress.full);
+
+        unityInstance.container.appendChild(unityInstance.progress);
+      }
+
+      unityInstance.progress.full.style.width = `${100 * progress}%`;
+      unityInstance.progress.empty.style.width = `${100 * (1 - progress)}%`;
+
+      if (progress === 1) {
+        unityInstance.logo.style.display = "none";
+        unityInstance.progress.style.display = "none";
+      }
+    }
+  </script>
+
+  <script src="https://media.blooket.com/raw/upload/jtehwrcp4tk5a891kdy0.js"></script>
+</head>
+
+<body>
+  <div class="webgl-content">
+    <div id="unityContainer"></div>
+  </div>
+
+  <script>
+    const unityConfig = {
+      companyName: "REMEN1015 Games",
+      productName: "Baldi's Basics 5 Years Birthday Bash",
+      productVersion: "1.0",
+
+      dataUrl:
+        "https://quizizz.com/_media/baldi/9f870823-e239-4f12-889e-d058731dd32a-v2",
+      wasmCodeUrl:
+        "https://media.blooket.com/raw/upload/m9y88k8ylcnj6ixsn3qa.unityweb",
+      wasmFrameworkUrl:
+        "https://media.blooket.com/raw/upload/vdbgp72aqiqlwnpseihk.unityweb",
+
+      graphicsAPI: [
+        "WebGL 2.0",
+        "WebGL 1.0"
+      ],
+
+      webglContextAttributes: {
+        preserveDrawingBuffer: false
+      },
+
+      backgroundUrl:
+        "https://media.blooket.com/raw/upload/kleoy4eizb91dwfoaoa2.jpg",
+
+      splashScreenStyle: "Dark",
+      backgroundColor: "#FFFFFF",
+
+      cacheControl: {
+        default: "must-revalidate"
+      },
+
+      developmentBuild: false,
+      multithreading: false,
+      unityVersion: "2019.4.40f1"
+    };
+
+    const configURL = URL.createObjectURL(
+      new Blob([JSON.stringify(unityConfig)], {
+        type: "application/json"
+      })
+    );
+
+    UnityLoader.instantiate("unityContainer", configURL, {
+      onProgress: UnityProgress
+    });
+  </script>
+</body>
+</html>

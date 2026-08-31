@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
+  <title>69420</title>
+
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #unity-container {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #unity-canvas {
+      display: block;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: #000;
+    }
+
+    #unity-loading-bar {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      z-index: 10;
+      display: none;
+      width: 154px;
+      transform: translate(-50%, -50%);
+    }
+
+    #unity-logo {
+      width: 154px;
+      height: 130px;
+      background: url("https://media.blooket.com/raw/upload/pltmzwigbccfvsaayw1s.png")
+        no-repeat center;
+    }
+
+    #unity-progress-bar-empty {
+      width: 141px;
+      height: 18px;
+      margin-top: 10px;
+      margin-left: 6.5px;
+      background: url("https://media.blooket.com/raw/upload/yvytkd2fsvq63e7u7xwr.png")
+        no-repeat center;
+    }
+
+    #unity-progress-bar-full {
+      width: 0;
+      height: 18px;
+      margin-top: 10px;
+      background: url("https://media.blooket.com/raw/upload/cjrsgplyop3dlejx71zj.png")
+        no-repeat center;
+    }
+
+    #unity-warning {
+      position: absolute;
+      top: 5%;
+      left: 50%;
+      z-index: 20;
+      display: none;
+      padding: 10px;
+      transform: translateX(-50%);
+      background: #fff;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="unity-container">
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+
+    <div id="unity-loading-bar">
+      <div id="unity-logo"></div>
+
+      <div id="unity-progress-bar-empty">
+        <div id="unity-progress-bar-full"></div>
+      </div>
+    </div>
+
+    <div id="unity-warning"></div>
+  </div>
+
+  <script>
+    const canvas = document.querySelector("#unity-canvas");
+    const loadingBar = document.querySelector("#unity-loading-bar");
+    const progressBarFull = document.querySelector("#unity-progress-bar-full");
+    const warningBanner = document.querySelector("#unity-warning");
+
+    function unityShowBanner(message, type) {
+      const div = document.createElement("div");
+      div.innerHTML = message;
+      warningBanner.appendChild(div);
+
+      if (type === "error") {
+        div.style.cssText = "background:red;padding:10px;";
+      } else if (type === "warning") {
+        div.style.cssText = "background:yellow;padding:10px;";
+      }
+
+      warningBanner.style.display = "block";
+
+      if (type !== "error") {
+        setTimeout(() => {
+          div.remove();
+
+          if (!warningBanner.children.length) {
+            warningBanner.style.display = "none";
+          }
+        }, 5000);
+      }
+    }
+
+    const config = {
+      dataUrl:
+        "https://media.blooket.com/raw/upload/fz8tamriyv6trehcitxg.br",
+      frameworkUrl:
+        "https://media.blooket.com/raw/upload/et9sx6alupuaoryukhkx.br",
+      codeUrl:
+        "https://media.blooket.com/raw/upload/mh8gagkf19ezghtx8uc9.br",
+      streamingAssetsUrl:
+        "https://html-classic.itch.zone/html/17771040/69420webb/StreamingAssets",
+      companyName: "DefaultCompany",
+      productName: "69420",
+      productVersion: "1.4.3",
+      showBanner: unityShowBanner
+    };
+
+    loadingBar.style.display = "block";
+
+    const script = document.createElement("script");
+    script.src =
+      "https://media.blooket.com/raw/upload/hhwqpd32lgkmtoba0wxm.js";
+
+    script.onload = () => {
+      createUnityInstance(
+        canvas,
+        config,
+        progress => {
+          progressBarFull.style.width = `${100 * progress}%`;
+        }
+      )
+        .then(() => {
+          loadingBar.style.display = "none";
+        })
+        .catch(alert);
+    };
+
+    script.onerror = () => {
+      alert("Failed to load the Unity WebGL loader.");
+    };
+
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>

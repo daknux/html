@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Breakdi's School</title>
+
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #unity-container {
+            position: fixed;
+            inset: 0;
+        }
+
+        #unity-canvas {
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        #unity-loading-bar {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            display: none;
+            transform: translate(-50%, -50%);
+        }
+
+        #unity-logo {
+            width: 154px;
+            height: 130px;
+            background: url("https://media.blooket.com/raw/upload/rdnzhlur6djbyqwuhpa9.png")
+                no-repeat center;
+        }
+
+        #unity-progress-bar-empty {
+            width: 141px;
+            height: 18px;
+            margin-top: 10px;
+            background: url("https://media.blooket.com/raw/upload/gjqopuvmjikghdgwkxrn.png")
+                no-repeat center;
+        }
+
+        #unity-progress-bar-full {
+            width: 0;
+            height: 18px;
+            margin-top: 10px;
+            background: url("https://media.blooket.com/raw/upload/zjfrpyuvjwh8ifor0ebg.png")
+                no-repeat center;
+        }
+
+        #unity-mobile-warning {
+            position: absolute;
+            top: 5%;
+            left: 50%;
+            display: none;
+            padding: 10px;
+            background: #fff;
+            transform: translateX(-50%);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="unity-container">
+        <canvas id="unity-canvas"></canvas>
+
+        <div id="unity-loading-bar">
+            <div id="unity-logo"></div>
+            <div id="unity-progress-bar-empty">
+                <div id="unity-progress-bar-full"></div>
+            </div>
+        </div>
+
+        <div id="unity-mobile-warning">
+            WebGL builds are not supported on mobile devices.
+        </div>
+    </div>
+
+    <script>
+        const loaderUrl =
+            "https://media.blooket.com/raw/upload/jr1vadwicg2k2adgnje4.js";
+
+        const config = {
+            dataUrl:
+                "https://media.blooket.com/raw/upload/gxxcip3ievaqoohcoqm0.data",
+            frameworkUrl:
+                "https://media.blooket.com/raw/upload/o1hcu0uzbpqsq41fjj6t.js",
+            codeUrl:
+                "https://media.blooket.com/raw/upload/gn6uud6ekgkitizbtjgu.wasm",
+            streamingAssetsUrl: "StreamingAssets",
+            companyName: "TavBav99Studios",
+            productName: "Breakdi's School",
+            productVersion: "1.7"
+        };
+
+        const canvas = document.getElementById("unity-canvas");
+        const loadingBar = document.getElementById("unity-loading-bar");
+        const progressBar = document.getElementById("unity-progress-bar-full");
+        const mobileWarning = document.getElementById("unity-mobile-warning");
+
+        if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+            mobileWarning.style.display = "block";
+            config.devicePixelRatio = 1;
+
+            setTimeout(() => {
+                mobileWarning.style.display = "none";
+            }, 5000);
+        }
+
+        loadingBar.style.display = "block";
+
+        const script = document.createElement("script");
+        script.src = loaderUrl;
+
+        script.onload = () => {
+            createUnityInstance(canvas, config, progress => {
+                progressBar.style.width = `${progress * 100}%`;
+            })
+                .then(() => {
+                    loadingBar.style.display = "none";
+                })
+                .catch(error => {
+                    alert(error);
+                });
+        };
+
+        document.body.appendChild(script);
+    </script>
+</body>
+</html>

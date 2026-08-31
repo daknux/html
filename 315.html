@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Baldi's Basics In Minigames 2</title>
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #unityContainer {
+      position: fixed;
+      inset: 0;
+    }
+
+    canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    #unityContainer .logo,
+    #unityContainer .progress {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    #unityContainer .logo {
+      width: 154px;
+      height: 130px;
+      background: url("https://media.blooket.com/raw/upload/nswa2iondhwtsmqrak7a.png")
+        no-repeat center / contain;
+    }
+
+    #unityContainer .progress {
+      width: 141px;
+      height: 18px;
+      margin-top: 90px;
+    }
+
+    #unityContainer .progress .empty {
+      float: right;
+      width: 100%;
+      height: 100%;
+      background: url("https://media.blooket.com/raw/upload/lliobecdtzcslcmidorv.png")
+        no-repeat right / cover;
+    }
+
+    #unityContainer .progress .full {
+      float: left;
+      width: 0;
+      height: 100%;
+      background: url("https://media.blooket.com/raw/upload/zjubwdjg8wxzczwv6iaf.png")
+        no-repeat left / cover;
+    }
+
+    #unityContainer .logo.Dark {
+      background-image: url("https://media.blooket.com/raw/upload/mfrlfwnpw9ommmliacwv.png");
+    }
+
+    #unityContainer .progress.Dark .empty {
+      background-image: url("https://media.blooket.com/raw/upload/nhr6fmwhxdvz1gx1sanp.png");
+    }
+
+    #unityContainer .progress.Dark .full {
+      background-image: url("https://media.blooket.com/raw/upload/pelqjd1scsflxywnjhsg.png");
+    }
+  </style>
+
+  <script>
+    function UnityProgress(unityInstance, progress) {
+      if (!unityInstance.Module) return;
+
+      if (!unityInstance.logo) {
+        unityInstance.logo = document.createElement("div");
+        unityInstance.logo.className =
+          "logo " + unityInstance.Module.splashScreenStyle;
+        unityInstance.container.appendChild(unityInstance.logo);
+      }
+
+      if (!unityInstance.progress) {
+        unityInstance.progress = document.createElement("div");
+        unityInstance.progress.className =
+          "progress " + unityInstance.Module.splashScreenStyle;
+
+        unityInstance.progress.empty = document.createElement("div");
+        unityInstance.progress.empty.className = "empty";
+        unityInstance.progress.appendChild(unityInstance.progress.empty);
+
+        unityInstance.progress.full = document.createElement("div");
+        unityInstance.progress.full.className = "full";
+        unityInstance.progress.appendChild(unityInstance.progress.full);
+
+        unityInstance.container.appendChild(unityInstance.progress);
+      }
+
+      unityInstance.progress.full.style.width = `${100 * progress}%`;
+      unityInstance.progress.empty.style.width = `${100 * (1 - progress)}%`;
+
+      if (progress === 1) {
+        unityInstance.logo.style.display = "none";
+        unityInstance.progress.style.display = "none";
+      }
+    }
+  </script>
+
+  <script src="https://media.blooket.com/raw/upload/i3o5jnsryf5rijyl6w1k.js"></script>
+</head>
+
+<body>
+  <div id="unityContainer"></div>
+
+  <script>
+    const unityConfig = {
+      companyName: "Baldisagoodperson",
+      productName: "Baldi's Basics In Minigames 2",
+      productVersion: "0.1",
+      dataUrl:
+        "https://media.blooket.com/raw/upload/nhagrw0tfgmmp8mb6kqm.unityweb",
+      wasmCodeUrl:
+        "https://media.blooket.com/raw/upload/fpxdyjxbdw0w7uhtdxge.unityweb",
+      wasmFrameworkUrl:
+        "https://media.blooket.com/raw/upload/iskqb0gumvbpb6dcjeia.unityweb",
+      graphicsAPI: ["WebGL 2.0", "WebGL 1.0"],
+      webglContextAttributes: {
+        preserveDrawingBuffer: false
+      },
+      backgroundUrl:
+        "https://media.blooket.com/raw/upload/hjxcsl0dcabbidc4ped7.jpg",
+      splashScreenStyle: "Dark",
+      backgroundColor: "#FFFFFF",
+      cacheControl: {
+        default: "must-revalidate"
+      },
+      developmentBuild: false,
+      multithreading: false,
+      unityVersion: "2019.2.14f1"
+    };
+
+    const jsonURL = URL.createObjectURL(
+      new Blob([JSON.stringify(unityConfig)], {
+        type: "application/json"
+      })
+    );
+
+    UnityLoader.instantiate("unityContainer", jsonURL, {
+      onProgress: UnityProgress
+    });
+  </script>
+</body>
+</html>
