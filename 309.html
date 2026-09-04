@@ -136,13 +136,16 @@
       while (true) {
         const { done, value } = await reader.read();
 
-        if (done) break;
+        if (done) {
+          break;
+        }
 
         chunks.push(value);
         received += value.length;
 
         if (total) {
           const progress = received / total;
+
           progressBar.style.width =
             `${(start + progress * (end - start)) * 100}%`;
         }
@@ -166,6 +169,28 @@
       return URL.createObjectURL(
         new Blob([decompressed], { type: mime })
       );
+    }
+
+    async function loadJsSvg(url) {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(response.status);
+      }
+
+      const source = await response.text();
+      const matches = [...source.matchAll(/<svg\b[^>]*>/gi)];
+
+      if (!matches.length) {
+        return source;
+      }
+
+      const start =
+        matches.length >= 2
+          ? matches[1].index + matches[1][0].length
+          : matches[0].index + matches[0][0].length;
+
+      return source.substring(start);
     }
 
     (async () => {
@@ -219,12 +244,15 @@
         showBanner: unityShowBanner
       };
 
-      const loader = document.createElement("script");
+      try {
+        const source = await loadJsSvg(
+          "https://media.blooket.com/raw/upload/cw5nudm9tp5zfdqqvyce.js-svg"
+        );
 
-      loader.src =
-        "https://media.blooket.com/raw/upload/atcofcwgtbued0if2u9e.js";
+        const loader = document.createElement("script");
+        loader.textContent = source;
+        document.body.appendChild(loader);
 
-      loader.onload = () => {
         createUnityInstance(
           canvas,
           config,
@@ -239,9 +267,10 @@
             console.error(error);
             unityShowBanner(error, "error");
           });
-      };
-
-      document.body.appendChild(loader);
+      } catch (error) {
+        console.error(error);
+        unityShowBanner(error, "error");
+      }
     })();
   </script>
 </body>
