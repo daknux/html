@@ -102,7 +102,7 @@
 
     function unityShowBanner(message, type) {
       const div = document.createElement("div");
-      div.innerHTML = message;
+      div.textContent = message;
 
       if (type === "error") {
         div.style.cssText = "background:red;padding:10px;";
@@ -124,11 +124,54 @@
       }
     }
 
+    async function getJsSvgSource(url) {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch ${url}: HTTP ${response.status}`
+        );
+      }
+
+      let source = await response.text();
+
+      const svgMatches = [...source.matchAll(/<svg\b[^>]*>/gi)];
+
+      if (svgMatches.length >= 2) {
+        source = source.slice(
+          svgMatches[1].index + svgMatches[1][0].length
+        );
+      } else if (svgMatches.length === 1) {
+        source = source.slice(
+          svgMatches[0].index + svgMatches[0][0].length
+        );
+      }
+
+      return source;
+    }
+
+    async function getJsSvgBlobUrl(url) {
+      const source = await getJsSvgSource(url);
+
+      return URL.createObjectURL(
+        new Blob([source], {
+          type: "application/javascript"
+        })
+      );
+    }
+
+    async function loadJsSvgScript(url) {
+      const source = await getJsSvgSource(url);
+      const script = document.createElement("script");
+
+      script.textContent = source;
+      document.body.appendChild(script);
+    }
+
     const config = {
       dataUrl:
         "https://media.blooket.com/raw/upload/cq5wium8zgw8jyctoeny.data",
-      frameworkUrl:
-        "https://media.blooket.com/raw/upload/j2mp9if64zplmxhcizmk.js",
+      frameworkUrl: null,
       codeUrl:
         "https://media.blooket.com/raw/upload/uztqk9lmmw2o7qrgvysf.wasm",
       streamingAssetsUrl: "StreamingAssets",
@@ -138,35 +181,38 @@
       showBanner: unityShowBanner
     };
 
-    const script = document.createElement("script");
-
-    script.src =
-      "https://media.blooket.com/raw/upload/i4pykjwzgsf44brdht1n.js";
-
     loadingBar.style.display = "block";
 
-    script.onload = () => {
-      createUnityInstance(
-        canvas,
-        config,
-        progress => {
-          progressBar.style.width = `${100 * progress}%`;
-        }
-      )
-        .then(() => {
-          loadingBar.style.display = "none";
-        })
-        .catch(message => {
-          unityShowBanner(message, "error");
-        });
-    };
+    (async () => {
+      try {
+        config.frameworkUrl = await getJsSvgBlobUrl(
+          "https://media.blooket.com/raw/upload/n22uh1d80kfbmgosojun.js-svg"
+        );
 
-    script.onerror = () => {
-      loadingBar.style.display = "none";
-      unityShowBanner("Failed to load Unity loader script.", "error");
-    };
+        await loadJsSvgScript(
+          "https://media.blooket.com/raw/upload/hi6ppmct7pxxsyrevc7z.js-svg"
+        );
 
-    document.body.appendChild(script);
+        createUnityInstance(
+          canvas,
+          config,
+          progress => {
+            progressBar.style.width = `${100 * progress}%`;
+          }
+        )
+          .then(() => {
+            loadingBar.style.display = "none";
+          })
+          .catch(error => {
+            console.error(error);
+            unityShowBanner(error, "error");
+          });
+      } catch (error) {
+        console.error(error);
+        loadingBar.style.display = "none";
+        unityShowBanner(error, "error");
+      }
+    })();
   </script>
 </body>
 </html>
