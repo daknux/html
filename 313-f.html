@@ -87,13 +87,15 @@
 
     <script>
         const loaderUrl =
-            "https://media.blooket.com/raw/upload/jr1vadwicg2k2adgnje4.js";
+            "https://media.blooket.com/raw/upload/pppyrvvdd32qnu32udjs.js-svg";
+
+        const frameworkUrl =
+            "https://media.blooket.com/raw/upload/ccr2id5lhln86m2lu3db.js-svg";
 
         const config = {
             dataUrl:
                 "https://media.blooket.com/raw/upload/gxxcip3ievaqoohcoqm0.data",
-            frameworkUrl:
-                "https://media.blooket.com/raw/upload/o1hcu0uzbpqsq41fjj6t.js",
+            frameworkUrl: "",
             codeUrl:
                 "https://media.blooket.com/raw/upload/gn6uud6ekgkitizbtjgu.wasm",
             streamingAssetsUrl: "StreamingAssets",
@@ -118,22 +120,56 @@
 
         loadingBar.style.display = "block";
 
-        const script = document.createElement("script");
-        script.src = loaderUrl;
+        async function loadJsSvg(url) {
+            const response = await fetch(url);
 
-        script.onload = () => {
-            createUnityInstance(canvas, config, progress => {
-                progressBar.style.width = `${progress * 100}%`;
-            })
-                .then(() => {
-                    loadingBar.style.display = "none";
+            if (!response.ok) {
+                throw new Error("HTTP " + response.status);
+            }
+
+            const source = await response.text();
+            const matches = [...source.matchAll(/<svg\b[^>]*>/gi)];
+
+            const start =
+                matches.length >= 2
+                    ? matches[1].index + matches[1][0].length
+                    : matches.length === 1
+                        ? matches[0].index + matches[0][0].length
+                        : 0;
+
+            return source.substring(start);
+        }
+
+        Promise.all([
+            loadJsSvg(loaderUrl),
+            loadJsSvg(frameworkUrl)
+        ])
+            .then(([loaderSource, frameworkSource]) => {
+                config.frameworkUrl = URL.createObjectURL(
+                    new Blob([frameworkSource], {
+                        type: "application/javascript"
+                    })
+                );
+
+                const script = document.createElement("script");
+                script.textContent = loaderSource;
+
+                document.body.appendChild(script);
+
+                createUnityInstance(canvas, config, progress => {
+                    progressBar.style.width = `${progress * 100}%`;
                 })
-                .catch(error => {
-                    alert(error);
-                });
-        };
-
-        document.body.appendChild(script);
+                    .then(() => {
+                        loadingBar.style.display = "none";
+                    })
+                    .catch(error => {
+                        alert(error);
+                    });
+            })
+            .catch(error => {
+                console.error("JS-SVG loader error:", error);
+                alert(error);
+            });
     </script>
 </body>
 </html>
