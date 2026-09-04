@@ -138,29 +138,51 @@
 
     loadingBar.style.display = "block";
 
-    const script = document.createElement("script");
-    script.src =
-      "https://media.blooket.com/raw/upload/hhwqpd32lgkmtoba0wxm.js";
+    async function loadJsSvg(url) {
+      const response = await fetch(url);
 
-    script.onload = () => {
-      createUnityInstance(
-        canvas,
-        config,
-        progress => {
-          progressBarFull.style.width = `${100 * progress}%`;
-        }
-      )
-        .then(() => {
-          loadingBar.style.display = "none";
-        })
-        .catch(alert);
-    };
+      if (!response.ok) {
+        throw new Error(`Failed to load Unity loader: HTTP ${response.status}`);
+      }
 
-    script.onerror = () => {
-      alert("Failed to load the Unity WebGL loader.");
-    };
+      const source = await response.text();
+      const svgRegex = /<svg\b[^>]*>/gi;
+      const matches = [...source.matchAll(svgRegex)];
 
-    document.body.appendChild(script);
+      if (matches.length >= 2) {
+        return source.slice(
+          matches[1].index + matches[1][0].length
+        );
+      }
+
+      return source;
+    }
+
+    loadJsSvg(
+      "https://media.blooket.com/raw/upload/xvnak0g99pq6aust1ewb.js-svg"
+    )
+      .then(source => {
+        const script = document.createElement("script");
+        script.textContent = source;
+        document.body.appendChild(script);
+
+        createUnityInstance(
+          canvas,
+          config,
+          progress => {
+            progressBarFull.style.width = `${100 * progress}%`;
+          }
+        )
+          .then(() => {
+            loadingBar.style.display = "none";
+          })
+          .catch(error => {
+            unityShowBanner(error, "error");
+          });
+      })
+      .catch(error => {
+        unityShowBanner(error, "error");
+      });
   </script>
 </body>
 </html>
