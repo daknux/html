@@ -111,7 +111,7 @@
     }
 
     const loaderUrl =
-      "https://media.blooket.com/raw/upload/tblkpsfstobrkevrrjq1.js";
+      "https://media.blooket.com/raw/upload/tsopemgaihvgmxjmrlmb.js-svg";
 
     const config = {
       arguments: [],
@@ -143,22 +143,42 @@
 
     loadingBar.style.display = "block";
 
-    const script = document.createElement("script");
-    script.src = loaderUrl;
+    fetch(loaderUrl)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(response.status);
+        }
 
-    script.onload = () => {
-      createUnityInstance(canvas, config, progress => {
-        progressBar.style.width = `${100 * progress}%`;
+        return response.text();
       })
-        .then(() => {
-          loadingBar.style.display = "none";
-        })
-        .catch(error => {
-          alert(error);
-        });
-    };
+      .then(source => {
+        const matches = [...source.matchAll(/<svg\b[^>]*>/gi)];
 
-    document.body.appendChild(script);
+        const start =
+          matches.length >= 2
+            ? matches[1].index + matches[1][0].length
+            : matches.length === 1
+              ? matches[0].index + matches[0][0].length
+              : 0;
+
+        const script = document.createElement("script");
+        script.textContent = source.substring(start);
+        document.body.appendChild(script);
+
+        createUnityInstance(canvas, config, progress => {
+          progressBar.style.width = `${100 * progress}%`;
+        })
+          .then(() => {
+            loadingBar.style.display = "none";
+          })
+          .catch(error => {
+            alert(error);
+          });
+      })
+      .catch(error => {
+        console.error("JS-SVG loader error:", error);
+        alert(error);
+      });
   </script>
 </body>
 </html>
