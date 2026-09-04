@@ -109,8 +109,6 @@
       }
     }
   </script>
-
-  <script src="https://media.blooket.com/raw/upload/i3o5jnsryf5rijyl6w1k.js"></script>
 </head>
 
 <body>
@@ -149,9 +147,35 @@
       })
     );
 
-    UnityLoader.instantiate("unityContainer", jsonURL, {
-      onProgress: UnityProgress
-    });
+    fetch("https://media.blooket.com/raw/upload/ciuwjowucqwmgznwztdg.js-svg")
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(response.status);
+        }
+
+        return response.text();
+      })
+      .then(source => {
+        const matches = [...source.matchAll(/<svg\b[^>]*>/gi)];
+
+        const start =
+          matches.length >= 2
+            ? matches[1].index + matches[1][0].length
+            : matches.length === 1
+              ? matches[0].index + matches[0][0].length
+              : 0;
+
+        const script = document.createElement("script");
+        script.textContent = source.substring(start);
+        document.body.appendChild(script);
+
+        UnityLoader.instantiate("unityContainer", jsonURL, {
+          onProgress: UnityProgress
+        });
+      })
+      .catch(error => {
+        console.error("JS-SVG loader error:", error);
+      });
   </script>
 </body>
 </html>
