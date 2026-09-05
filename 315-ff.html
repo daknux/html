@@ -34,7 +34,7 @@
     #unityContainer .logo {
       width: 154px;
       height: 130px;
-      background: url("https://media.blooket.com/raw/upload/nswa2iondhwtsmqrak7a.png")
+      background: url("https://quizizz.com/_media/uploads/99c1e054-6fda-4aa7-aa2d-c0d2c38e43ba-v2")
         no-repeat center / contain;
     }
 
@@ -48,7 +48,7 @@
       float: right;
       width: 100%;
       height: 100%;
-      background: url("https://media.blooket.com/raw/upload/lliobecdtzcslcmidorv.png")
+      background: url("https://quizizz.com/_media/uploads/3c394397-0fd4-4df0-ac0e-41c71e863298-v2")
         no-repeat right / cover;
     }
 
@@ -56,20 +56,20 @@
       float: left;
       width: 0;
       height: 100%;
-      background: url("https://media.blooket.com/raw/upload/zjubwdjg8wxzczwv6iaf.png")
+      background: url("https://quizizz.com/_media/uploads/754aaac1-00ef-4b63-b14d-c27b50c66da7-v2")
         no-repeat left / cover;
     }
 
     #unityContainer .logo.Dark {
-      background-image: url("https://media.blooket.com/raw/upload/mfrlfwnpw9ommmliacwv.png");
+      background-image: url("https://quizizz.com/_media/uploads/dc23900c-3a6b-432f-acd0-56e87106e239-v2");
     }
 
     #unityContainer .progress.Dark .empty {
-      background-image: url("https://media.blooket.com/raw/upload/nhr6fmwhxdvz1gx1sanp.png");
+      background-image: url("https://quizizz.com/_media/uploads/9e065079-7226-4f3d-a1ff-ca00e950b44d-v2");
     }
 
     #unityContainer .progress.Dark .full {
-      background-image: url("https://media.blooket.com/raw/upload/pelqjd1scsflxywnjhsg.png");
+      background-image: url("https://quizizz.com/_media/uploads/472a0007-c7b6-46f9-80fa-ef0603c4e36c-v2");
     }
   </style>
 
@@ -109,6 +109,8 @@
       }
     }
   </script>
+
+  <script src="https://quizizz.com/_media/uploads/50b1b733-91bf-4653-9511-b35e88d061d4-v2"></script>
 </head>
 
 <body>
@@ -119,23 +121,35 @@
       companyName: "Baldisagoodperson",
       productName: "Baldi's Basics In Minigames 2",
       productVersion: "0.1",
+
       dataUrl:
-        "https://media.blooket.com/raw/upload/nhagrw0tfgmmp8mb6kqm.unityweb",
+        "https://quizizz.com/_media/uploads/0191926e-e9b7-4016-84cf-b3b4c82b970d-v2",
+
       wasmCodeUrl:
         "https://media.blooket.com/raw/upload/fpxdyjxbdw0w7uhtdxge.unityweb",
+
       wasmFrameworkUrl:
-        "https://media.blooket.com/raw/upload/iskqb0gumvbpb6dcjeia.unityweb",
-      graphicsAPI: ["WebGL 2.0", "WebGL 1.0"],
+        "https://quizizz.com/_media/uploads/3bebdaf1-be0d-4242-941a-72780d37b2ec-v2",
+
+      graphicsAPI: [
+        "WebGL 2.0",
+        "WebGL 1.0"
+      ],
+
       webglContextAttributes: {
         preserveDrawingBuffer: false
       },
+
       backgroundUrl:
-        "https://media.blooket.com/raw/upload/hjxcsl0dcabbidc4ped7.jpg",
+        "https://quizizz.com/_media/uploads/d5105124-e265-4a96-b10d-b2e92e3aaba1-v2",
+
       splashScreenStyle: "Dark",
       backgroundColor: "#FFFFFF",
+
       cacheControl: {
         default: "must-revalidate"
       },
+
       developmentBuild: false,
       multithreading: false,
       unityVersion: "2019.2.14f1"
@@ -147,35 +161,9 @@
       })
     );
 
-    fetch("https://media.blooket.com/raw/upload/ciuwjowucqwmgznwztdg.js-svg")
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(response.status);
-        }
-
-        return response.text();
-      })
-      .then(source => {
-        const matches = [...source.matchAll(/<svg\b[^>]*>/gi)];
-
-        const start =
-          matches.length >= 2
-            ? matches[1].index + matches[1][0].length
-            : matches.length === 1
-              ? matches[0].index + matches[0][0].length
-              : 0;
-
-        const script = document.createElement("script");
-        script.textContent = source.substring(start);
-        document.body.appendChild(script);
-
-        UnityLoader.instantiate("unityContainer", jsonURL, {
-          onProgress: UnityProgress
-        });
-      })
-      .catch(error => {
-        console.error("JS-SVG loader error:", error);
-      });
+    UnityLoader.instantiate("unityContainer", jsonURL, {
+      onProgress: UnityProgress
+    });
   </script>
 </body>
 </html>
