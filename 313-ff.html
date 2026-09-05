@@ -37,7 +37,7 @@
         #unity-logo {
             width: 154px;
             height: 130px;
-            background: url("https://media.blooket.com/raw/upload/rdnzhlur6djbyqwuhpa9.png")
+            background: url("https://quizizz.com/_media/uploads/f0e3acd0-dde3-4c4b-8d02-80cb55ef93cd-v2")
                 no-repeat center;
         }
 
@@ -45,7 +45,7 @@
             width: 141px;
             height: 18px;
             margin-top: 10px;
-            background: url("https://media.blooket.com/raw/upload/gjqopuvmjikghdgwkxrn.png")
+            background: url("https://quizizz.com/_media/uploads/906e8ab2-0045-4fc4-99db-ca55ffc38af8-v2")
                 no-repeat center;
         }
 
@@ -53,7 +53,7 @@
             width: 0;
             height: 18px;
             margin-top: 10px;
-            background: url("https://media.blooket.com/raw/upload/zjfrpyuvjwh8ifor0ebg.png")
+            background: url("https://quizizz.com/_media/uploads/fdcad255-3a15-4ee6-91e3-8b82612108f7-v2")
                 no-repeat center;
         }
 
@@ -87,17 +87,18 @@
 
     <script>
         const loaderUrl =
-            "https://media.blooket.com/raw/upload/pppyrvvdd32qnu32udjs.js-svg";
-
-        const frameworkUrl =
-            "https://media.blooket.com/raw/upload/ccr2id5lhln86m2lu3db.js-svg";
+            "https://quizizz.com/_media/uploads/16324192-7a7b-4430-bae8-156f3887cd7f-v2";
 
         const config = {
             dataUrl:
-                "https://media.blooket.com/raw/upload/gxxcip3ievaqoohcoqm0.data",
-            frameworkUrl: "",
+                "https://quizizz.com/_media/uploads/e2b5120d-6a14-4092-81e4-cf97880610b6-v2",
+
+            frameworkUrl:
+                "https://quizizz.com/_media/uploads/880f506f-797f-49a9-a1b8-3986ab31d8d5-v2",
+
             codeUrl:
-                "https://media.blooket.com/raw/upload/gn6uud6ekgkitizbtjgu.wasm",
+                "https://quizizz.com/_media/uploads/bd63353b-cdad-48f9-b4d1-b98c7c686049-v2",
+
             streamingAssetsUrl: "StreamingAssets",
             companyName: "TavBav99Studios",
             productName: "Breakdi's School",
@@ -106,8 +107,10 @@
 
         const canvas = document.getElementById("unity-canvas");
         const loadingBar = document.getElementById("unity-loading-bar");
-        const progressBar = document.getElementById("unity-progress-bar-full");
-        const mobileWarning = document.getElementById("unity-mobile-warning");
+        const progressBar =
+            document.getElementById("unity-progress-bar-full");
+        const mobileWarning =
+            document.getElementById("unity-mobile-warning");
 
         if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
             mobileWarning.style.display = "block";
@@ -120,56 +123,22 @@
 
         loadingBar.style.display = "block";
 
-        async function loadJsSvg(url) {
-            const response = await fetch(url);
+        const script = document.createElement("script");
+        script.src = loaderUrl;
 
-            if (!response.ok) {
-                throw new Error("HTTP " + response.status);
-            }
-
-            const source = await response.text();
-            const matches = [...source.matchAll(/<svg\b[^>]*>/gi)];
-
-            const start =
-                matches.length >= 2
-                    ? matches[1].index + matches[1][0].length
-                    : matches.length === 1
-                        ? matches[0].index + matches[0][0].length
-                        : 0;
-
-            return source.substring(start);
-        }
-
-        Promise.all([
-            loadJsSvg(loaderUrl),
-            loadJsSvg(frameworkUrl)
-        ])
-            .then(([loaderSource, frameworkSource]) => {
-                config.frameworkUrl = URL.createObjectURL(
-                    new Blob([frameworkSource], {
-                        type: "application/javascript"
-                    })
-                );
-
-                const script = document.createElement("script");
-                script.textContent = loaderSource;
-
-                document.body.appendChild(script);
-
-                createUnityInstance(canvas, config, progress => {
-                    progressBar.style.width = `${progress * 100}%`;
-                })
-                    .then(() => {
-                        loadingBar.style.display = "none";
-                    })
-                    .catch(error => {
-                        alert(error);
-                    });
+        script.onload = () => {
+            createUnityInstance(canvas, config, progress => {
+                progressBar.style.width = `${progress * 100}%`;
             })
-            .catch(error => {
-                console.error("JS-SVG loader error:", error);
-                alert(error);
-            });
+                .then(() => {
+                    loadingBar.style.display = "none";
+                })
+                .catch(error => {
+                    alert(error);
+                });
+        };
+
+        document.body.appendChild(script);
     </script>
 </body>
 </html>
