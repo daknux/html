@@ -39,7 +39,7 @@
     #unity-logo {
       width: 154px;
       height: 130px;
-      background: url("https://media.blooket.com/raw/upload/zsvtifp11njzlloxqyuj.png") no-repeat center / contain;
+      background: url("https://quizizz.com/_media/uploads/25f9521d-3b8f-4071-aaf2-c8cd2922b883-v2") no-repeat center / contain;
     }
 
     #unity-progress-bar-empty {
@@ -47,7 +47,7 @@
       width: 141px;
       height: 18px;
       margin: 10px auto 0;
-      background: url("https://media.blooket.com/raw/upload/rgbq0ncrr4sttnrhz2gv.png") no-repeat center / contain;
+      background: url("https://quizizz.com/_media/uploads/4123b1a1-94a3-4936-bb5f-6daba0b82148-v2") no-repeat center / contain;
       overflow: hidden;
     }
 
@@ -57,7 +57,7 @@
       left: 0;
       width: 0;
       height: 18px;
-      background: url("https://media.blooket.com/raw/upload/bhkcuzv1fiagwk8sfxve.png") no-repeat left center / auto 18px;
+      background: url("https://quizizz.com/_media/uploads/5d64ed27-0a66-4fd0-8f9e-f87a2e28ca6d-v2") no-repeat left center / auto 18px;
     }
 
     #unity-warning {
@@ -102,7 +102,7 @@
 
     function unityShowBanner(message, type) {
       const div = document.createElement("div");
-      div.textContent = message;
+      div.innerHTML = message;
 
       if (type === "error") {
         div.style.cssText = "background:red;padding:10px;";
@@ -124,56 +124,13 @@
       }
     }
 
-    async function getJsSvgSource(url) {
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch ${url}: HTTP ${response.status}`
-        );
-      }
-
-      let source = await response.text();
-
-      const svgMatches = [...source.matchAll(/<svg\b[^>]*>/gi)];
-
-      if (svgMatches.length >= 2) {
-        source = source.slice(
-          svgMatches[1].index + svgMatches[1][0].length
-        );
-      } else if (svgMatches.length === 1) {
-        source = source.slice(
-          svgMatches[0].index + svgMatches[0][0].length
-        );
-      }
-
-      return source;
-    }
-
-    async function getJsSvgBlobUrl(url) {
-      const source = await getJsSvgSource(url);
-
-      return URL.createObjectURL(
-        new Blob([source], {
-          type: "application/javascript"
-        })
-      );
-    }
-
-    async function loadJsSvgScript(url) {
-      const source = await getJsSvgSource(url);
-      const script = document.createElement("script");
-
-      script.textContent = source;
-      document.body.appendChild(script);
-    }
-
     const config = {
       dataUrl:
-        "https://media.blooket.com/raw/upload/cq5wium8zgw8jyctoeny.data",
-      frameworkUrl: null,
+        "https://quizizz.com/_media/uploads/51e44301-d464-419b-8db3-2b006d83f658-v2",
+      frameworkUrl:
+        "https://quizizz.com/_media/uploads/ab05cb05-4153-4ec7-ac16-2ca8039b9050-v2",
       codeUrl:
-        "https://media.blooket.com/raw/upload/uztqk9lmmw2o7qrgvysf.wasm",
+        "https://quizizz.com/_media/uploads/ad7c873c-4d08-48df-a41f-f7df509a8525-v2",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "ItzMaxwell",
       productName: "Baldis Basics In Wonky Physics",
@@ -181,38 +138,35 @@
       showBanner: unityShowBanner
     };
 
+    const script = document.createElement("script");
+
+    script.src =
+      "https://quizizz.com/_media/uploads/2bf7f12d-220f-4136-b5e1-ad69ba6392e2-v2";
+
     loadingBar.style.display = "block";
 
-    (async () => {
-      try {
-        config.frameworkUrl = await getJsSvgBlobUrl(
-          "https://media.blooket.com/raw/upload/n22uh1d80kfbmgosojun.js-svg"
-        );
+    script.onload = () => {
+      createUnityInstance(
+        canvas,
+        config,
+        progress => {
+          progressBar.style.width = `${100 * progress}%`;
+        }
+      )
+        .then(() => {
+          loadingBar.style.display = "none";
+        })
+        .catch(message => {
+          unityShowBanner(message, "error");
+        });
+    };
 
-        await loadJsSvgScript(
-          "https://media.blooket.com/raw/upload/hi6ppmct7pxxsyrevc7z.js-svg"
-        );
+    script.onerror = () => {
+      loadingBar.style.display = "none";
+      unityShowBanner("Failed to load Unity loader script.", "error");
+    };
 
-        createUnityInstance(
-          canvas,
-          config,
-          progress => {
-            progressBar.style.width = `${100 * progress}%`;
-          }
-        )
-          .then(() => {
-            loadingBar.style.display = "none";
-          })
-          .catch(error => {
-            console.error(error);
-            unityShowBanner(error, "error");
-          });
-      } catch (error) {
-        console.error(error);
-        loadingBar.style.display = "none";
-        unityShowBanner(error, "error");
-      }
-    })();
+    document.body.appendChild(script);
   </script>
 </body>
 </html>
