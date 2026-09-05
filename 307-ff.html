@@ -37,7 +37,7 @@
     #unity-logo {
       width: 154px;
       height: 130px;
-      background: url("https://media.blooket.com/raw/upload/zsvtifp11njzlloxqyuj.png")
+      background: url("https://quizizz.com/_media/uploads/e02f680d-bac1-4e86-b06e-e7654a3077c7-v2")
         center / contain no-repeat;
     }
 
@@ -48,14 +48,14 @@
       margin-top: 10px;
       margin-left: 6.5px;
       overflow: hidden;
-      background: url("https://media.blooket.com/raw/upload/rgbq0ncrr4sttnrhz2gv.png")
+      background: url("https://quizizz.com/_media/uploads/a56062a8-2c71-4d77-8a3f-992aecab0913-v2")
         center / 141px 18px no-repeat;
     }
 
     #unity-progress-bar-full {
       width: 141px;
       height: 18px;
-      background: url("https://media.blooket.com/raw/upload/bhkcuzv1fiagwk8sfxve.png")
+      background: url("https://quizizz.com/_media/uploads/8241ad9f-fc8c-4c94-8603-9c9959f4f20e-v2")
         left center / 141px 18px no-repeat;
       transform: scaleX(0);
       transform-origin: left center;
@@ -123,9 +123,9 @@
       dataUrl:
         "https://quizizz.com/_media/baldi/1fc8ad1a-50d8-4bfa-860c-9cf2d49bfca3-v2",
       frameworkUrl:
-        "https://media.blooket.com/raw/upload/fffoml8v2llxft67dlur.br",
+        "https://quizizz.com/_media/uploads/8d348646-99d8-4bdf-a1db-11ae03797dd1-v2",
       codeUrl:
-        "https://media.blooket.com/raw/upload/hnh8w8uubcv6ccecopqm.br",
+        "https://quizizz.com/_media/uploads/7a553bbe-9282-4aff-ac12-704b5a8671cf-v2",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Naberson265 Games",
       productName: "Baldi's Basics Squared Demo",
@@ -134,56 +134,27 @@
     };
 
     canvas.style.background =
-      "url('https://media.blooket.com/raw/upload/kf35l2g43xxsx9scfqya.jpg') center / cover";
+      "url('https://quizizz.com/_media/uploads/d3afddbd-4d93-4e80-9fed-b4c6da80e38a-v2') center / cover";
 
     loadingBar.style.display = "block";
 
-    async function loadJsSvg(url) {
-      const response = await fetch(url);
+    const script = document.createElement("script");
+    script.src =
+      "https://quizizz.com/_media/uploads/97b12f1c-9909-40c3-8e7e-e6cb3ff21988-v2";
 
-      if (!response.ok) {
-        throw new Error(
-          "Failed to load JavaScript: HTTP " + response.status
-        );
-      }
-
-      const source = await response.text();
-      const matches = [...source.matchAll(/<svg\b[^>]*>/gi)];
-
-      if (!matches.length) {
-        return source;
-      }
-
-      const start =
-        matches.length >= 2
-          ? matches[1].index + matches[1][0].length
-          : matches[0].index + matches[0][0].length;
-
-      return source.substring(start);
-    }
-
-    loadJsSvg(
-      "https://media.blooket.com/raw/upload/zqmqq4i88lq1z7jawcra.js-svg"
-    )
-      .then(code => {
-        const script = document.createElement("script");
-        script.textContent = code;
-        document.body.appendChild(script);
-
-        createUnityInstance(canvas, config, progress => {
-          progressBar.style.transform = `scaleX(${progress})`;
-        })
-          .then(() => {
-            loadingBar.style.display = "none";
-          })
-          .catch(error => {
-            alert(error);
-          });
+    script.onload = () => {
+      createUnityInstance(canvas, config, progress => {
+        progressBar.style.transform = `scaleX(${progress})`;
       })
-      .catch(error => {
-        console.error("JS-SVG loader error:", error);
-        alert(error);
-      });
+        .then(() => {
+          loadingBar.style.display = "none";
+        })
+        .catch(error => {
+          alert(error);
+        });
+    };
+
+    document.body.appendChild(script);
   </script>
 </body>
 </html>
