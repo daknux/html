@@ -89,11 +89,13 @@ canvas{
 	<div id="error"></div>
 </div>
 
+<script src="https://quizizz.com/_media/uploads/80d2b28c-cea0-44fc-b648-b655fd98d124-v2"></script>
+
 <script>
-const BASE_URL="https://media.blooket.com/raw/upload/";
-const LOADER_URL=BASE_URL+"qoxupxakiq5bndv6hylu.js-svg";
-const PACK_URL=BASE_URL+"fvhelbtgbt7e5prv2kud.pck";
-const WASM_URL=BASE_URL+"cdgjqbjfxea0mkffu2z8.wasm";
+const BASE_URL="https://quizizz.com/_media/uploads/";
+
+const PACK_URL=BASE_URL+"dfb79abe-fda1-405c-b290-724531b82c17-v2";
+const WASM_URL=BASE_URL+"142cf22f-7601-49e5-aeea-700476fcee36-v2";
 
 const GODOT_CONFIG={
 	args:[],
@@ -149,66 +151,34 @@ function fail(err){
 	show("error");
 }
 
-async function loadJsSvg(url){
-	const response=await fetch(url);
+if(!Engine.isWebGLAvailable()){
+	fail("WebGL not available");
+}else{
+	show("spinner");
 
-	if(!response.ok)
-		throw new Error(`Failed to load loader: HTTP ${response.status}`);
+	const engine=new Engine(GODOT_CONFIG);
 
-	const source=await response.text();
-	const matches=[...source.matchAll(/<svg\b[^>]*>/gi)];
+	engine.startGame({
+		onProgress(current,total){
+			if(total>0){
+				bar.style.width=current/total*100+"%";
+				show("progress");
 
-	if(!matches.length)
-		return source;
-
-	const index=matches.length>=2
-		?matches[1].index+matches[1][0].length
-		:matches[0].index+matches[0][0].length;
-
-	return source.substring(index);
-}
-
-(async()=>{
-	try{
-		const loaderSource=await loadJsSvg(LOADER_URL);
-
-		const script=document.createElement("script");
-		script.textContent=loaderSource;
-		document.body.appendChild(script);
-
-		if(!Engine.isWebGLAvailable()){
-			fail("WebGL not available");
-			return;
-		}
-
-		show("spinner");
-
-		const engine=new Engine(GODOT_CONFIG);
-
-		engine.startGame({
-			onProgress(current,total){
-				if(total>0){
-					bar.style.width=current/total*100+"%";
-					show("progress");
-
-					if(current===total){
-						setTimeout(()=>show("spinner"),500);
-					}
-				}else{
-					show("spinner");
+				if(current===total){
+					setTimeout(()=>show("spinner"),500);
 				}
+			}else{
+				show("spinner");
 			}
-		}).then(
-			()=>{
-				status.style.visibility="hidden";
-				status.style.display="none";
-			},
-			fail
-		);
-	}catch(err){
-		fail(err);
-	}
-})();
+		}
+	}).then(
+		()=>{
+			status.style.visibility="hidden";
+			status.style.display="none";
+		},
+		fail
+	);
+}
 </script>
 
 </body>
