@@ -51,7 +51,7 @@
     #unity-logo {
       width: 154px;
       height: 130px;
-      background: url("https://media.blooket.com/raw/upload/zztqjdzdt58hj0ozgkdd.png")
+      background: url("https://quizizz.com/_media/uploads/c39d84ec-fbb0-4c81-9241-9f51261f3c49-v2")
         no-repeat center;
     }
 
@@ -60,7 +60,7 @@
       height: 18px;
       margin-top: 10px;
       margin-left: 6.5px;
-      background: url("https://media.blooket.com/raw/upload/mzuz4t0no7ckroyxxecw.png")
+      background: url("https://quizizz.com/_media/uploads/cb34d1f0-4fe2-4d79-ba00-400e10c902da-v2")
         no-repeat center;
     }
 
@@ -68,7 +68,7 @@
       width: 0;
       height: 18px;
       margin-top: 10px;
-      background: url("https://media.blooket.com/raw/upload/nfkzobt0iffak2sfxwvi.png")
+      background: url("https://quizizz.com/_media/uploads/6c8606e0-5afd-476e-9ca7-34835e15fc65-v2")
         no-repeat center;
     }
 
@@ -136,16 +136,13 @@
       while (true) {
         const { done, value } = await reader.read();
 
-        if (done) {
-          break;
-        }
+        if (done) break;
 
         chunks.push(value);
         received += value.length;
 
         if (total) {
           const progress = received / total;
-
           progressBar.style.width =
             `${(start + progress * (end - start)) * 100}%`;
         }
@@ -171,28 +168,6 @@
       );
     }
 
-    async function loadJsSvg(url) {
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(response.status);
-      }
-
-      const source = await response.text();
-      const matches = [...source.matchAll(/<svg\b[^>]*>/gi)];
-
-      if (!matches.length) {
-        return source;
-      }
-
-      const start =
-        matches.length >= 2
-          ? matches[1].index + matches[1][0].length
-          : matches[0].index + matches[0][0].length;
-
-      return source.substring(start);
-    }
-
     (async () => {
       loadingBar.style.display = "block";
 
@@ -211,21 +186,21 @@
       }
 
       const frameworkURL = await getGzip(
-        "https://media.blooket.com/raw/upload/kautap7hlaxax9cba79x.gz",
+        "https://quizizz.com/_media/uploads/48d1e391-fa26-486a-8217-954143575c39-v2",
         "js",
         0,
         0.25
       );
 
       const dataURL = await getGzip(
-        "https://media.blooket.com/raw/upload/h9dzawfec0whnkpbync1.gz",
+        "https://quizizz.com/_media/uploads/8d4b1385-9f1e-4cc3-8885-2f9bb4e56e49-v2",
         "data",
         0.25,
         0.55
       );
 
       const wasmURL = await getGzip(
-        "https://media.blooket.com/raw/upload/am0rx4aignlscf6ehux7.gz",
+        "https://quizizz.com/_media/uploads/9b86a8ac-fd7e-41d3-a5b3-51642414d604-v2",
         "wasm",
         0.55,
         0.95
@@ -244,15 +219,12 @@
         showBanner: unityShowBanner
       };
 
-      try {
-        const source = await loadJsSvg(
-          "https://media.blooket.com/raw/upload/cw5nudm9tp5zfdqqvyce.js-svg"
-        );
+      const loader = document.createElement("script");
 
-        const loader = document.createElement("script");
-        loader.textContent = source;
-        document.body.appendChild(loader);
+      loader.src =
+        "https://quizizz.com/_media/uploads/d12ae973-b0ef-4844-9258-882159807f9a-v2";
 
+      loader.onload = () => {
         createUnityInstance(
           canvas,
           config,
@@ -267,10 +239,9 @@
             console.error(error);
             unityShowBanner(error, "error");
           });
-      } catch (error) {
-        console.error(error);
-        unityShowBanner(error, "error");
-      }
+      };
+
+      document.body.appendChild(loader);
     })();
   </script>
 </body>
