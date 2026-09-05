@@ -28,7 +28,7 @@
     #unityContainer .logo {
       width: 154px;
       height: 130px;
-      background: url("https://media.blooket.com/raw/upload/mfrlfwnpw9ommmliacwv.png")
+      background: url("https://quizizz.com/_media/uploads/3815192a-4079-4437-b108-2a476faeb0de-v2")
         no-repeat center / contain;
     }
 
@@ -42,7 +42,7 @@
       float: right;
       width: 100%;
       height: 100%;
-      background: url("https://media.blooket.com/raw/upload/nhr6fmwhxdvz1gx1sanp.png")
+      background: url("https://quizizz.com/_media/uploads/40ba3ae3-9246-4f0f-b850-e1bcbd39cabc-v2")
         no-repeat right / cover;
     }
 
@@ -50,7 +50,7 @@
       float: left;
       width: 0;
       height: 100%;
-      background: url("https://media.blooket.com/raw/upload/pelqjd1scsflxywnjhsg.png")
+      background: url("https://quizizz.com/_media/uploads/4df249b6-54ba-4991-97b2-b62146bc00f8-v2")
         no-repeat left / cover;
     }
   </style>
@@ -92,6 +92,8 @@
       }
     }
   </script>
+
+  <script src="https://quizizz.com/_media/uploads/c2fddb1e-f665-4255-8c02-aebea04628ff-v2"></script>
 </head>
 
 <body>
@@ -104,11 +106,11 @@
       productVersion: "1.0",
 
       dataUrl:
-        "https://media.blooket.com/raw/upload/sgevrsmy63f9oijevutv.unityweb",
+        "https://quizizz.com/_media/uploads/5231aa59-453d-49e9-8ac0-d726128a07e6-v2",
       wasmCodeUrl:
         "https://media.blooket.com/raw/upload/akg7lnxvcnv1aszhlcaq.unityweb",
       wasmFrameworkUrl:
-        "https://media.blooket.com/raw/upload/x3wqpwcwbbzmewv3zr3w.unityweb",
+        "https://quizizz.com/_media/uploads/ba5705ae-e5ea-463b-9d8a-88f0a69996aa-v2",
 
       graphicsAPI: [
         "WebGL 2.0",
@@ -133,36 +135,9 @@
       })
     );
 
-    fetch("https://media.blooket.com/raw/upload/xj16lmdhcgrpjynqcbky.js-svg")
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(response.status);
-        }
-
-        return response.text();
-      })
-      .then(source => {
-        const matches = [...source.matchAll(/<svg\b[^>]*>/gi)];
-
-        const start =
-          matches.length >= 2
-            ? matches[1].index + matches[1][0].length
-            : matches.length === 1
-              ? matches[0].index + matches[0][0].length
-              : 0;
-
-        const script = document.createElement("script");
-        script.textContent = source.substring(start);
-        document.body.appendChild(script);
-
-        UnityLoader.instantiate("unityContainer", jsonURL, {
-          onProgress: UnityProgress
-        });
-      })
-      .catch(error => {
-        console.error("JS-SVG loader error:", error);
-        alert(error);
-      });
+    UnityLoader.instantiate("unityContainer", jsonURL, {
+      onProgress: UnityProgress
+    });
   </script>
 </body>
 </html>
