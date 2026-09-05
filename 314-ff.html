@@ -34,7 +34,7 @@
     #unity-logo {
       width: 154px;
       height: 130px;
-      background: url("https://media.blooket.com/raw/upload/qiodbxfg1wnk1zopvecc.png")
+      background: url("https://quizizz.com/_media/uploads/a55e8351-6442-4503-b57f-44cfd71fec48-v2")
         no-repeat center;
     }
 
@@ -43,7 +43,7 @@
       height: 18px;
       margin-top: 10px;
       margin-left: 6.5px;
-      background: url("https://media.blooket.com/raw/upload/ikwzh9fak9oawkzjqums.png")
+      background: url("https://quizizz.com/_media/uploads/2377c7a5-ea64-4504-88f5-be3785e29fff-v2")
         no-repeat center;
     }
 
@@ -51,7 +51,7 @@
       width: 0;
       height: 18px;
       margin-top: 10px;
-      background: url("https://media.blooket.com/raw/upload/xocv251dt1w0c7sbajam.png")
+      background: url("https://quizizz.com/_media/uploads/b4a3e5ff-6292-4426-951c-22df3d2cb672-v2")
         no-repeat center;
     }
 
@@ -111,16 +111,16 @@
     }
 
     const loaderUrl =
-      "https://media.blooket.com/raw/upload/tsopemgaihvgmxjmrlmb.js-svg";
+      "https://quizizz.com/_media/uploads/895a2e42-afde-4f6a-b93c-f51dc8f990d2-v2";
 
     const config = {
       arguments: [],
       dataUrl:
-        "https://media.blooket.com/raw/upload/xvp04tbvvokyetlhhhyb.gz",
+        "https://quizizz.com/_media/uploads/5cc72d4b-f2b8-440c-8c48-9aea1e11e193-v2",
       frameworkUrl:
-        "https://media.blooket.com/raw/upload/elrlowmnuqpmbogk1idu.gz",
+        "https://quizizz.com/_media/uploads/6ec59cea-b81e-489d-a9dd-b6e5a3dad831-v2",
       codeUrl:
-        "https://media.blooket.com/raw/upload/o3eojjsubhhhgtid3fgw.gz",
+        "https://quizizz.com/_media/uploads/894d3770-a98f-4361-a0d0-4a468cd34e4c-v2",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "None",
       productName: "Baldi's Basics Squared",
@@ -143,42 +143,22 @@
 
     loadingBar.style.display = "block";
 
-    fetch(loaderUrl)
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(response.status);
-        }
+    const script = document.createElement("script");
+    script.src = loaderUrl;
 
-        return response.text();
+    script.onload = () => {
+      createUnityInstance(canvas, config, progress => {
+        progressBar.style.width = `${100 * progress}%`;
       })
-      .then(source => {
-        const matches = [...source.matchAll(/<svg\b[^>]*>/gi)];
-
-        const start =
-          matches.length >= 2
-            ? matches[1].index + matches[1][0].length
-            : matches.length === 1
-              ? matches[0].index + matches[0][0].length
-              : 0;
-
-        const script = document.createElement("script");
-        script.textContent = source.substring(start);
-        document.body.appendChild(script);
-
-        createUnityInstance(canvas, config, progress => {
-          progressBar.style.width = `${100 * progress}%`;
+        .then(() => {
+          loadingBar.style.display = "none";
         })
-          .then(() => {
-            loadingBar.style.display = "none";
-          })
-          .catch(error => {
-            alert(error);
-          });
-      })
-      .catch(error => {
-        console.error("JS-SVG loader error:", error);
-        alert(error);
-      });
+        .catch(error => {
+          alert(error);
+        });
+    };
+
+    document.body.appendChild(script);
   </script>
 </body>
 </html>
