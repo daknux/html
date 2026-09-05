@@ -70,36 +70,13 @@ canvas{display:block;width:100%;height:100%}
 	<div id="error"></div>
 </div>
 
+<script src="https://quizizz.com/_media/uploads/05fd3443-e8c5-4315-83b2-41caaea678f9-v2"></script>
+
 <script>
-const BASE_URL="https://media.blooket.com/raw/upload/";
-const PACK_URL=BASE_URL+"hnfdbrc3fajdcax0ddjp.pck";
-const WASM_URL=BASE_URL+"cdgjqbjfxea0mkffu2z8.wasm";
-const LOADER_URL=BASE_URL+"rro6cjcdrkld2vemot1d.js-svg";
+const BASE_URL="https://quizizz.com/_media/uploads/";
 
-async function loadJsSvg(url){
-	const response=await fetch(url);
-
-	if(!response.ok){
-		throw new Error("Failed to load JavaScript: HTTP "+response.status);
-	}
-
-	let source=await response.text();
-	const matches=[...source.matchAll(/<svg\b[^>]*>/gi)];
-
-	if(matches.length>=2){
-		source=source.slice(
-			matches[1].index+matches[1][0].length
-		);
-	}else if(matches.length===1){
-		source=source.slice(
-			matches[0].index+matches[0][0].length
-		);
-	}
-
-	const script=document.createElement("script");
-	script.textContent=source;
-	document.body.appendChild(script);
-}
+const PACK_URL=BASE_URL+"0ee6b4c9-c614-4455-8434-eb9d2c689cf1-v2";
+const WASM_URL=BASE_URL+"f5880ba4-0d65-49f7-8db3-d6edd989e438-v2";
 
 const GODOT_CONFIG={
 	args:[],
@@ -157,43 +134,34 @@ function showError(errorMessage){
 	showStatus("error");
 }
 
-(async()=>{
-	try{
-		await loadJsSvg(LOADER_URL);
+if(!Engine.isWebGLAvailable()){
+	showError("WebGL not available");
+}else{
+	showStatus("spinner");
 
-		if(!Engine.isWebGLAvailable()){
-			showError("WebGL not available");
-			return;
-		}
+	const engine=new Engine(GODOT_CONFIG);
 
-		showStatus("spinner");
+	engine.startGame({
+		onProgress(current,total){
+			if(total>0){
+				progressBar.style.width=current/total*100+"%";
+				showStatus("progress");
 
-		const engine=new Engine(GODOT_CONFIG);
-
-		engine.startGame({
-			onProgress(current,total){
-				if(total>0){
-					progressBar.style.width=current/total*100+"%";
-					showStatus("progress");
-
-					if(current===total){
-						setTimeout(()=>showStatus("spinner"),500);
-					}
-				}else{
-					showStatus("spinner");
+				if(current===total){
+					setTimeout(()=>showStatus("spinner"),500);
 				}
+			}else{
+				showStatus("spinner");
 			}
-		}).then(
-			()=>{
-				status.style.visibility="hidden";
-				status.style.display="none";
-			},
-			showError
-		);
-	}catch(errorMessage){
-		showError(errorMessage);
-	}
-})();
+		}
+	}).then(
+		()=>{
+			status.style.visibility="hidden";
+			status.style.display="none";
+		},
+		showError
+	);
+}
 </script>
 </body>
 </html>
