@@ -74,6 +74,50 @@
   </style>
 
   <script>
+    (function () {
+      function fixUrl(url) {
+        if (typeof url !== "string") return url;
+
+        var m = url.match(/Build\/https?:(.*)$/);
+        if (m) {
+          return "https://" + m[1].replace(/^\/+/, "");
+        }
+
+        m = url.match(/\/(https?):\/+([^\/]+.*)$/);
+        if (m && m[1] === "https" && m[2].indexOf("quizizz.com") === 0) {
+          return "https://" + m[2];
+        }
+
+        return url;
+      }
+
+      var origOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (method, url) {
+        var args = Array.prototype.slice.call(arguments);
+        if (typeof url === "string") {
+          args[1] = fixUrl(url);
+        }
+        return origOpen.apply(this, args);
+      };
+
+      if (window.fetch) {
+        var origFetch = window.fetch;
+        window.fetch = function (input, init) {
+          if (typeof input === "string") {
+            input = fixUrl(input);
+          } else if (input instanceof Request) {
+            var fixed = fixUrl(input.url);
+            if (fixed !== input.url) {
+              input = new Request(fixed, input);
+            }
+          }
+          return origFetch.call(this, input, init);
+        };
+      }
+    })();
+  </script>
+
+  <script>
     function UnityProgress(unityInstance, progress) {
       if (!unityInstance.Module) return;
 
@@ -126,15 +170,12 @@
         "https://quizizz.com/_media/uploads/0191926e-e9b7-4016-84cf-b3b4c82b970d-v2",
 
       wasmCodeUrl:
-        "https://media.blooket.com/raw/upload/fpxdyjxbdw0w7uhtdxge.unityweb",
+        "https://quizizz.com/_media/uploads/4830c3da-ddf0-4b60-ae3c-95b8dafce600-v2",
 
       wasmFrameworkUrl:
         "https://quizizz.com/_media/uploads/3bebdaf1-be0d-4242-941a-72780d37b2ec-v2",
 
-      graphicsAPI: [
-        "WebGL 2.0",
-        "WebGL 1.0"
-      ],
+      graphicsAPI: ["WebGL 2.0", "WebGL 1.0"],
 
       webglContextAttributes: {
         preserveDrawingBuffer: false
