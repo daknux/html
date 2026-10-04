@@ -450,6 +450,30 @@
             subText.innerText = '';
         }
     })();
+
+(function () {
+    const M = 4.5;
+    const p = MouseEvent.prototype;
+    if (p.__spMouse)
+        return;
+    const x = Object.getOwnPropertyDescriptor(p, 'movementX');
+    const y = Object.getOwnPropertyDescriptor(p, 'movementY');
+    if (x && x.get)
+        Object.defineProperty(p, 'movementX', {
+            configurable: true,
+            get() {
+                return x.get.call(this) * M
+            }
+        });
+    if (y && y.get)
+        Object.defineProperty(p, 'movementY', {
+            configurable: true,
+            get() {
+                return y.get.call(this) * M
+            }
+        });
+    p.__spMouse = true;
+})();
     </script>
 </body>
 </html>
