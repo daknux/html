@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>delta</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+    <meta name="generator" content="Scirra Construct">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000000;
+            overflow: hidden;
+            color: #ffffff;
+            font-family: sans-serif;
+        }
+        #loading-screen {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            z-index: 9999;
+        }
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.1);
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0%   { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #progress-wrap {
+            margin-top: 20px;
+            width: 260px;
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            display: none;
+        }
+        #progress-bar {
+            height: 100%;
+            width: 0%;
+            background: #09f;
+            transition: width 0.15s linear;
+        }
+        #status-text {
+            margin-top: 16px;
+            font-size: 14px;
+            opacity: 0.85;
+        }
+        #sub-text {
+            margin-top: 6px;
+            font-size: 12px;
+            opacity: 0.5;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <p id="status-text">Downloading dependencies...</p>
+        <div id="progress-wrap"><div id="progress-bar"></div></div>
+        <p id="sub-text"></p>
+    </div>
+
+    <script>
+    (async function() {
+        const ZIP_URL = 'https://quizizz.com/_media/uploadedFiles/1b5360be-6e95-419d-a0c5-431e3d240ceb-v2';
+
+        const statusText = document.getElementById('status-text');
+        const subText = document.getElementById('sub-text');
+        const progressWrap = document.getElementById('progress-wrap');
+        const progressBar = document.getElementById('progress-bar');
+        const loadingScreen = document.getElementById('loading-screen');
+
+        function showProgress(show) {
+            progressWrap.style.display = show ? 'block' : 'none';
+        }
+        function setProgress(fraction) {
+            progressBar.style.width = Math.max(0, Math.min(1, fraction)) * 100 + '%';
+        }
+        function fmtMB(bytes) {
+            return (bytes / (1024 * 1024)).toFixed(2);
+        }
+
+        function hideLoadingWhenReady() {
+            const tryHide = () => {
+                const canvas = document.querySelector('canvas:not(#__hidden__)');
+                if (canvas && canvas.offsetWidth > 0 && getComputedStyle(canvas).display !== 'none') {
+                    loadingScreen.style.display = 'none';
+                    return true;
+                }
+                return false;
+            };
+            if (tryHide()) return;
+            const obs = new MutationObserver(() => { if (tryHide()) obs.disconnect(); });
+            obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+            const poll = setInterval(() => { if (tryHide()) clearInterval(poll); }, 200);
+            setTimeout(() => { clearInterval(poll); obs.disconnect(); loadingScreen.style.display = 'none'; }, 15000);
+        }
+
+        try {
+            statusText.innerText = "Downloading game assets...";
+            showProgress(true);
+            setProgress(0);
+
+            const zipRes = await fetch(ZIP_URL);
+            if (!zipRes.ok) throw new Error(`HTTP error! status: ${zipRes.status}`);
+
+            const totalBytes = parseInt(zipRes.headers.get('Content-Length') || '0', 10);
+            const reader = zipRes.body.getReader();
+            const chunks = [];
+            let received = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                received += value.length;
+                if (totalBytes > 0) {
+                    setProgress(received / totalBytes);
+                    subText.innerText = `${fmtMB(received)} MB / ${fmtMB(totalBytes)} MB`;
+                } else {
+                    subText.innerText = `${fmtMB(received)} MB`;
+                }
+            }
+
+            const arrayBuffer = new Uint8Array(received);
+            let offset = 0;
+            for (const c of chunks) {
+                arrayBuffer.set(c, offset);
+                offset += c.length;
+            }
+
+            statusText.innerText = "Extracting package...";
+            setProgress(0);
+            subText.innerText = '';
+
+            const zip = await JSZip.loadAsync(arrayBuffer.buffer);
+
+            const zipKeys = Object.keys(zip.files);
+            const dataJsonKey = zipKeys.find(k => k.endsWith('data.json'));
+            let rootPrefix = '';
+            if (dataJsonKey) {
+                rootPrefix = dataJsonKey.substring(0, dataJsonKey.indexOf('data.json'));
+            }
+
+            const fileMap = new Map();
+
+            const allEntries = Object.entries(zip.files).filter(([, f]) => !f.dir);
+            const totalEntries = allEntries.length;
+            let processed = 0;
+
+            for (const [relativePath, file] of allEntries) {
+                let cleanPath = relativePath;
+                if (rootPrefix && cleanPath.startsWith(rootPrefix)) {
+                    cleanPath = cleanPath.substring(rootPrefix.length);
+                }
+                cleanPath = cleanPath.replace(/^\//, '').toLowerCase();
+
+                let mimeType = 'application/octet-stream';
+                if (cleanPath.endsWith('.mp4')) mimeType = 'video/mp4';
+                else if (cleanPath.endsWith('.webm')) mimeType = 'video/webm';
+                else if (cleanPath.endsWith('.png')) mimeType = 'image/png';
+                else if (cleanPath.endsWith('.jpg') || cleanPath.endsWith('.jpeg')) mimeType = 'image/jpeg';
+                else if (cleanPath.endsWith('.gif')) mimeType = 'image/gif';
+                else if (cleanPath.endsWith('.svg')) mimeType = 'image/svg+xml';
+                else if (cleanPath.endsWith('.js')) mimeType = 'application/javascript';
+                else if (cleanPath.endsWith('.json')) mimeType = 'application/json';
+                else if (cleanPath.endsWith('.wasm')) mimeType = 'application/wasm';
+                else if (cleanPath.endsWith('.css')) mimeType = 'text/css';
+                else if (cleanPath.endsWith('.mp3')) mimeType = 'audio/mpeg';
+                else if (cleanPath.endsWith('.ogg')) mimeType = 'audio/ogg';
+                else if (cleanPath.endsWith('.wav')) mimeType = 'audio/wav';
+                else if (cleanPath.endsWith('.m4a')) mimeType = 'audio/mp4';
+                else if (cleanPath.endsWith('.webp')) mimeType = 'image/webp';
+
+                const blob = await file.async('blob');
+                fileMap.set(cleanPath, new Blob([blob], { type: mimeType }));
+
+                processed++;
+                setProgress(processed / totalEntries);
+                subText.innerText = `${processed} / ${totalEntries} files`;
+            }
+
+            function cleanPath(u) {
+                let s = String(u);
+                if (s.startsWith('blob:')) s = s.substring(5);
+                if (s.startsWith('http://') || s.startsWith('https://')) {
+                    try { s = new URL(s).pathname; } catch (e) {}
+                }
+                s = s.split('?')[0].split('#')[0];
+                s = s.replace(/^\.\//, '').replace(/^\//, '');
+                return s.toLowerCase();
+            }
+
+            function findFileBlob(target) {
+                if (!target || typeof target !== 'string') return null;
+                if (target.startsWith('data:')) return null;
+
+                const clean = cleanPath(target);
+                if (fileMap.has(clean)) return fileMap.get(clean);
+
+                const filename = clean.split('/').pop();
+                if (!filename) return null;
+                for (const [key, blob] of fileMap.entries()) {
+                    if (key === filename || key.endsWith('/' + filename)) return blob;
+                }
+                return null;
+            }
+
+            function resolveRelative(spec, fromPath) {
+                if (!spec.startsWith('.')) return null;
+
+                const fromDir = fromPath.includes('/') ? fromPath.substring(0, fromPath.lastIndexOf('/')) : '';
+                const parts = (fromDir + '/' + spec).split('/');
+                const out = [];
+                for (const p of parts) {
+                    if (p === '' || p === '.') continue;
+                    if (p === '..') { out.pop(); continue; }
+                    out.push(p);
+                }
+                const joined = out.join('/').toLowerCase();
+
+                const candidates = [joined, joined + '.js'];
+                for (const c of candidates) {
+                    if (fileMap.has(c) && (c.endsWith('.js') || c.endsWith('.mjs'))) return c;
+                }
+                const base = joined.split('/').pop();
+                for (const k of fileMap.keys()) {
+                    if (!k.endsWith('.js') && !k.endsWith('.mjs')) continue;
+                    if (k === base || k.endsWith('/' + base) || k.endsWith('/' + base + '.js')) return k;
+                }
+                return null;
+            }
+
+            const originalFetch = window.fetch;
+            window.fetch = async function(input, init) {
+                const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+                const blob = findFileBlob(urlStr);
+                if (blob) {
+                    return new Response(blob, {
+                        status: 200, statusText: 'OK',
+                        headers: {
+                            'Content-Type': blob.type || 'application/octet-stream',
+                            'Content-Length': blob.size.toString()
+                        }
+                    });
+                }
+                return originalFetch(input, init);
+            };
+
+            const originalXHR = window.XMLHttpRequest.prototype.open;
+            window.XMLHttpRequest.prototype.open = function(method, url, ...args) {
+                if (typeof url === 'string') {
+                    const blob = findFileBlob(url);
+                    if (blob) url = URL.createObjectURL(blob);
+                }
+                return originalXHR.call(this, method, url, ...args);
+            };
+
+            const NativeWorker = window.Worker;
+            window.Worker = function(url, options) {
+                let urlStr = (url && typeof url.href === 'string') ? url.href : String(url);
+                if (urlStr && !urlStr.startsWith('blob:')) {
+                    const blob = findFileBlob(urlStr);
+                    if (blob) {
+                        url = URL.createObjectURL(new Blob([blob], { type: 'application/javascript' }));
+                    }
+                }
+                return new NativeWorker(url, options);
+            };
+            window.Worker.prototype = NativeWorker.prototype;
+
+            const originalSetAttribute = Element.prototype.setAttribute;
+            Element.prototype.setAttribute = function(name, value) {
+                if (name.toLowerCase() === 'src' && typeof value === 'string' && !value.startsWith('data:') && !value.startsWith('blob:')) {
+                    const blob = findFileBlob(value);
+                    if (blob) value = URL.createObjectURL(blob);
+                }
+                return originalSetAttribute.call(this, name, value);
+            };
+
+            const cssBlob = findFileBlob('style.css');
+            if (cssBlob) {
+                const styleEl = document.createElement('style');
+                styleEl.textContent = await cssBlob.text();
+                document.head.appendChild(styleEl);
+            }
+
+            statusText.innerText = "Executing game runtime...";
+            setProgress(1);
+            subText.innerText = '';
+
+            window["C3_IsSupported"] = true;
+
+            const VIRTUAL_PREFIX = '__c3__';
+            const jsBlobUrls = new Map();
+            const imports = {};
+
+            const rewrittenCode = new Map();
+
+            for (const [path, blob] of fileMap.entries()) {
+                if (!path.endsWith('.js') && !path.endsWith('.mjs')) continue;
+
+                let code = await blob.text();
+
+                if (path === 'scripts/main.js') {
+                    code = code.replace(/useWorker:e(?![\w])/g, 'useWorker:false');
+                }
+
+                code = code.replace(/(['"])(\.\.?\/[^'"]+)\1/g, (m, q, spec) => {
+                    const resolved = resolveRelative(spec, path);
+                    if (resolved) {
+                        return q + VIRTUAL_PREFIX + '/' + resolved + q;
+                    }
+                    return m;
+                });
+
+                rewrittenCode.set(path, code);
+            }
+
+            for (const [path, code] of rewrittenCode.entries()) {
+                const url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+                jsBlobUrls.set(path, url);
+                imports[VIRTUAL_PREFIX + '/' + path] = url;
+                const basename = path.split('/').pop();
+                imports[VIRTUAL_PREFIX + '/' + basename] = url;
+                if (path.startsWith('scripts/')) {
+                    imports[VIRTUAL_PREFIX + '/' + path.substring('scripts/'.length)] = url;
+                }
+            }
+
+            const fakeOrigin = `blob:${location.origin}/`;
+            for (const [path, url] of jsBlobUrls.entries()) {
+                imports[fakeOrigin + path] = url;
+                imports[fakeOrigin + path.split('/').pop()] = url;
+            }
+
+            for (const [path, blob] of fileMap.entries()) {
+                if (!path.endsWith('.json')) continue;
+                const url = URL.createObjectURL(blob);
+                imports[fakeOrigin + path] = url;
+                imports[fakeOrigin + path.split('/').pop()] = url;
+            }
+
+            const im = document.createElement('script');
+            im.type = 'importmap';
+            im.textContent = JSON.stringify({ imports });
+            document.head.insertBefore(im, document.head.firstChild);
+
+            const patchScriptSrc = () => {
+                const descriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+                if (!descriptor) return;
+                Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+                    get: function() { return descriptor.get.call(this); },
+                    set: function(val) {
+                        if (typeof val === 'string' && !val.startsWith('data:') && !val.startsWith('blob:')) {
+                            const clean = cleanPath(val);
+                            let resolved = jsBlobUrls.get(clean);
+                            if (!resolved) {
+                                const base = clean.split('/').pop();
+                                for (const [k, u] of jsBlobUrls.entries()) {
+                                    if (k === base || k.endsWith('/' + base)) { resolved = u; break; }
+                                }
+                            }
+                            if (resolved) {
+                                val = resolved;
+                            } else {
+                                const blob = findFileBlob(clean);
+                                if (blob) val = URL.createObjectURL(blob);
+                            }
+                        }
+                        descriptor.set.call(this, val);
+                    }
+                });
+            };
+            patchScriptSrc();
+
+            const patchSrc = (proto) => {
+                const descriptor = Object.getOwnPropertyDescriptor(proto, 'src');
+                if (!descriptor) return;
+                Object.defineProperty(proto, 'src', {
+                    get: function() { return descriptor.get.call(this); },
+                    set: function(val) {
+                        if (typeof val === 'string' && !val.startsWith('data:') && !val.startsWith('blob:')) {
+                            const blob = findFileBlob(val);
+                            if (blob) val = URL.createObjectURL(blob);
+                        }
+                        descriptor.set.call(this, val);
+                    }
+                });
+            };
+            patchSrc(HTMLMediaElement.prototype);
+            patchSrc(HTMLSourceElement.prototype);
+            patchSrc(HTMLImageElement.prototype);
+
+            hideLoadingWhenReady();
+
+            const injectModule = (path) => {
+                return new Promise((resolve) => {
+                    const url = jsBlobUrls.get(path);
+                    if (!url) { resolve(); return; }
+                    const s = document.createElement('script');
+                    s.type = 'module';
+                    s.src = url;
+                    s.onload = () => resolve();
+                    s.onerror = (e) => {
+                        console.error('[module load error]', path, e);
+                        resolve();
+                    };
+                    document.head.appendChild(s);
+                });
+            };
+
+            await injectModule('scripts/offlineclient.js');
+            await injectModule('scripts/main.js');
+            await injectModule('scripts/register-sw.js');
+
+        } catch (err) {
+            console.error("Game execution failed:", err);
+            statusText.innerText = "Execution failed: " + err.message;
+            showProgress(false);
+            subText.innerText = '';
+        }
+    })();
+    </script>
+</body>
+</html>
