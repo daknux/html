@@ -1,153 +1,92 @@
-<html lang="en">
-<base href="https://cdn.jsdelivr.net/gh/pivotanimationsforyou7-ship-it/dosboxstuff/">
-<meta http-equiv="content-type" content="text/html;charset=UTF-8" />
-
+<!-- shxyder -->
+<!DOCTYPE html>
+<html lang="tr">
 <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title></title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>twinnn</title>
     <style>
-        html,
-        body {
+        body, html {
+            margin: 0;
+            padding: 0;
             width: 100%;
             height: 100%;
-            margin: 0;
-            padding: 0;
-            background: black;
-            color: #fedb1d;
             overflow: hidden;
+            background-color: #000;
         }
-        
-        #canvas {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: auto;
+
+        #contentContainer {
+            width: 100vw;
+            height: 100vh;
+            border: none;
+        }
+
+        iframe {
+            width: 100%;
             height: 100%;
-            background: black;
-            padding: 0;
-            margin: 0;
-            -webkit-transform: translate(-50%, -50%);
-            -moz-transform: translate(-50%, -50%);
-            -ms-transform: translate(-50%, -50%);
-            -o-transform: translate(-50%, -50%);
-            transform: translate(-50%, -50%);
-            /*pointer-events:none;*/
-        }
-        
-        .emularity-splash-screen {
-            text-align: center;
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 50%;
-            margin: 0;
-            box-sizing: border-box;
-            color: #000;
+            border: none;
+            display: block;
         }
     </style>
 </head>
-
 <body>
-    <canvas id="canvas" style="width: 50%; height: 50%; display: block; margin: 0 auto;" onClick="window.focus();" />
-    <script type="text/javascript" src="js/es6-promise.js"></script>
-    <script type="text/javascript" src="js/browserfs.min.js"></script>
-    <script type="text/javascript" src="js/loader.js"></script>
-    <!--<script src="../../../c/libs/jquery.min.js"></script>-->
-    <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
 
-    <script type="text/javascript">
-        function $_GET(param) {
-            var vars = {};
-            window.location.href.replace(location.hash, '').replace(
-                /[?&]+([^=&]+)=?([^&]*)?/gi, // regexp
-                function(m, key, value) { // callback
-                    vars[key] = value !== undefined ? value : '';
-                }
-            );
-            if (param) {
-                return vars[param] ? vars[param] : null;
+    <div id="contentContainer"></div>
+
+    <script>
+        const gameHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>google.net</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+    <meta name="generator" content="Scirra Construct">
+    <link rel="manifest" href="https://cdn.jsdelivr.net/gh/dayyiq/mm@main/appmanifest.json">
+    <link rel="apple-touch-icon" sizes="128x128" href="https://cdn.jsdelivr.net/gh/dayyiq/mm@main/icons/Иконка-128.png">
+    <link rel="apple-touch-icon" sizes="256x256" href="https://cdn.jsdelivr.net/gh/dayyiq/mm@main/icons/Иконка-256.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="https://cdn.jsdelivr.net/gh/dayyiq/mm@main/icons/Иконка-512.png">
+    <link rel="icon" type="image/png" href="icons/Иконка-512.png">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/dayyiq/mm@main/style.css">
+</head>
+<body>
+    <script>
+        if (location.protocol.substr(0, 4) === "file") {
+            alert("Web exports won't work until you upload them.");
+        }
+    <\/script>
+    <noscript>
+        <div id="notSupportedWrap">
+            <h2 id="notSupportedTitle">This content requires JavaScript</h2>
+            <p class="notSupportedMessage">JavaScript appears to be disabled. Please enable it to view this content.</p>
+        </div>
+    </noscript>
+    <script src="https://cdn.jsdelivr.net/gh/dayyiq/mm@main/scripts/modernjscheck.js"><\/script>
+    <script src="https://cdn.jsdelivr.net/gh/dayyiq/mm@main/scripts/supportcheck.js"><\/script>
+    <script src="https://cdn.jsdelivr.net/gh/dayyiq/mm@main/scripts/offlineclient.js" type="module"><\/script>
+    <script src="https://cdn.jsdelivr.net/gh/dayyiq/mm@main/scripts/main.js" type="module"><\/script>
+    <script src="https://cdn.jsdelivr.net/gh/dayyiq/mm@main/scripts/register-sw.js" type="module"><\/script>
+</body>
+</html>`.trim();
+
+        function loadGame() {
+            try {
+                const container = document.getElementById("contentContainer");
+                const blob = new Blob([gameHTML], { type: "text/html" });
+                const blobUrl = URL.createObjectURL(blob);
+
+                const iframe = document.createElement("iframe");
+                iframe.src = blobUrl;
+                container.appendChild(iframe);
+                
+                console.log("Oyun otomatik olarak yüklendi");
+            } catch (error) {
+                console.error("Hata oluştu:", error);
             }
-            return vars;
         }
 
-        var softs = {
-
-            SOD: {
-                file: 'softs/SOD.zip',
-                cmd: 'SOD.EXE',
-                pointer: true
-            },
-
-
-
-        }
-        var file = "SOD";
-        if ($_GET('soft') != null) {
-            if (softs[$_GET('soft')] != undefined) {
-                file = $_GET('soft')
-                    //parent.$notif('Loading '+$_GET('soft').replace(/_/g," ")+'.')
-            };
-        };
-        //
-        // DOS FILES
-        if (softs[file].machine == undefined) {
-            var dosbox = new Emulator(document.querySelector("#canvas"),
-                null,
-                new DosBoxLoader(DosBoxLoader.emulatorJS("js/dosbox-sync.js"),
-                    DosBoxLoader.locateAdditionalEmulatorJS(locateAdditionalFiles),
-                    DosBoxLoader.nativeResolution(640, 400),
-                    DosBoxLoader.mountZip("c",
-                        //DosBoxLoader.fetchFile("Software", "softs/" + softs[file].file)),
-                        DosBoxLoader.fetchFile("Software", softs[file].file)),
-                    DosBoxLoader.startExe(softs[file].cmd)));
-            dosbox.start({
-                waitAfterDownloading: false
-            });
-
-            function locateAdditionalFiles(filename) {
-                if (filename === "dosbox.html.mem") {
-                    return "js/dosbox-sync.mem";
-                }
-                return "js/" + filename;
-            }
-
-        }
-        //
-        // PC98 DOS FILES
-        if (softs[file].machine == 'PC98') {
-            var dosbox = new Emulator(document.querySelector("#canvas"),
-                null,
-                new PC98DosBoxLoader(PC98DosBoxLoader.emulatorJS("js/dosbox-x.js"),
-                    PC98DosBoxLoader.emulatorWASM("js/dosbox-x.wasm"),
-                    PC98DosBoxLoader.locateAdditionalEmulatorJS(locateAdditionalFiles),
-                    PC98DosBoxLoader.nativeResolution(640, 480),
-                    PC98DosBoxLoader.mountZip("c",
-                        PC98DosBoxLoader.fetchFile("Game File",
-                            "softs/" + softs[file].file)),
-                    PC98DosBoxLoader.mountZip("y",
-                        PC98DosBoxLoader.fetchFile("ROM File",
-                            "js/font.zip")),
-
-                    PC98DosBoxLoader.startExe(softs[file].cmd)))
-            dosbox.start({
-                waitAfterDownloading: true
-            });
-
-            function locateAdditionalFiles(filename) {
-                if (filename === "dosbox.html.mem") {
-                    return "js/dosbox-sync.mem";
-                }
-                return "js/" + filename;
-            }
-
-
-        }
-
-        if (softs[file].pointer == false) {
-            c = document.getElementById("canvas")
-            c.style.cursor = "none"
-        };
+        // Run the loader as soon as the page is ready
+        window.addEventListener("DOMContentLoaded", loadGame);
     </script>
 </body>
-
 </html>
