@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-title" content="Baldi's Basics Ultra Decompile">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <title>Baldi's Basics The Ultra Decompile</title>
+
+  <base href="https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@104c364f36401fd94165923f6b5a76c113e3540e/baldi%20decomp/">
+
+  <link rel="icon" type="image/png" href="TemplateData/favicon.png">
+  <link rel="apple-touch-icon" href="TemplateData/AppIcon.png">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="TemplateData/style.css">
+
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, sans-serif;
+    }
+
+    #unity-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #unity-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      outline: none;
+      background: #000;
+    }
+
+    #unity-footer {
+      display: none !important;
+    }
+
+    #unity-loading-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #000;
+      color: #fff;
+      transition: opacity 0.4s ease;
+    }
+
+    #loading-title {
+      margin: 0 20px 24px;
+      font-size: clamp(18px, 3vw, 28px);
+      font-weight: bold;
+      text-align: center;
+    }
+
+    #loading-track {
+      width: min(420px, 82vw);
+      height: 16px;
+      overflow: hidden;
+      background: #252525;
+      border: 1px solid #555;
+      border-radius: 10px;
+    }
+
+    #loading-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #1677ff, #51c8ff);
+      border-radius: inherit;
+      transition: width 0.15s ease;
+    }
+
+    #loading-info {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      width: min(420px, 82vw);
+      margin-top: 12px;
+      color: #ccc;
+      font-size: 13px;
+    }
+
+    #loading-status {
+      margin: 16px 20px 0;
+      color: #999;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    #unity-warning {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1100;
+      width: 100%;
+    }
+
+    #unity-warning > div {
+      padding: 10px;
+      background: #a00;
+      color: #fff;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="unity-container" class="unity-mobile">
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+    <div id="unity-warning"></div>
+  </div>
+
+  <div id="unity-loading-screen">
+    <div id="loading-title">Baldi's Basics: The Ultra Decompile</div>
+
+    <div id="loading-track">
+      <div id="loading-fill"></div>
+    </div>
+
+    <div id="loading-info">
+      <span id="loading-percent">0%</span>
+      <span id="loading-mb">0.0 MB downloaded</span>
+    </div>
+
+    <div id="loading-status">Preparing game files...</div>
+  </div>
+
+  <script>
+    const container = document.getElementById("unity-container");
+    const canvas = document.getElementById("unity-canvas");
+    const warningBanner = document.getElementById("unity-warning");
+    const loadingScreen = document.getElementById("unity-loading-screen");
+    const loadingFill = document.getElementById("loading-fill");
+    const loadingPercent = document.getElementById("loading-percent");
+    const loadingMB = document.getElementById("loading-mb");
+    const loadingStatus = document.getElementById("loading-status");
+
+    let downloadedBytes = 0;
+    let expectedBytes = 0;
+
+    function formatMB(bytes) {
+      return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    }
+
+    function updateLoading(progress, status) {
+      const percent = Math.max(0, Math.min(100, progress));
+
+      loadingFill.style.width = percent + "%";
+      loadingPercent.textContent = Math.floor(percent) + "%";
+      loadingStatus.textContent = status;
+      loadingMB.textContent = expectedBytes > 0
+        ? formatMB(downloadedBytes) + " / " + formatMB(expectedBytes)
+        : formatMB(downloadedBytes) + " downloaded";
+    }
+
+    function resizeGame() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+    }
+
+    window.addEventListener("resize", resizeGame);
+    window.addEventListener("orientationchange", resizeGame);
+    resizeGame();
+
+    function showBanner(message, type = "warning") {
+      const banner = document.createElement("div");
+      banner.textContent = message;
+      banner.style.cssText = type === "error"
+        ? "background:#a00;color:white;padding:10px"
+        : "background:#e5c400;color:black;padding:10px";
+
+      warningBanner.appendChild(banner);
+
+      if (type !== "error") {
+        setTimeout(() => banner.remove(), 5000);
+      }
+    }
+
+    async function mergeFiles(fileParts, label, progressStart, progressEnd) {
+      const buffers = [];
+      let fileBytes = 0;
+
+      for (let i = 0; i < fileParts.length; i++) {
+        const url = fileParts[i];
+
+        updateLoading(
+          progressStart + (progressEnd - progressStart) * (i / fileParts.length),
+          "Downloading " + label + " (" + (i + 1) + "/" + fileParts.length + ")..."
+        );
+
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          throw new Error("Failed to download " + url + " (" + response.status + ")");
+        }
+
+        const contentLength = Number(response.headers.get("content-length"));
+        if (Number.isFinite(contentLength) && contentLength > 0) {
+          expectedBytes += contentLength;
+        }
+
+        const buffer = await response.arrayBuffer();
+        buffers.push(buffer);
+        fileBytes += buffer.byteLength;
+        downloadedBytes += buffer.byteLength;
+
+        updateLoading(
+          progressStart + (progressEnd - progressStart) *
+            ((i + 1) / fileParts.length),
+          "Downloading " + label + " (" + (i + 1) + "/" + fileParts.length + ")..."
+        );
+      }
+
+      if (expectedBytes === 0) {
+        expectedBytes = downloadedBytes;
+      }
+
+      return URL.createObjectURL(
+        new Blob(buffers, { type: "application/octet-stream" })
+      );
+    }
+
+    function getParts(filename, start, end) {
+      return Array.from(
+        { length: end - start + 1 },
+        (_, index) => filename + ".part" + (start + index)
+      );
+    }
+
+    function isMobile() {
+      return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+        (/Mac/.test(navigator.userAgent) && navigator.maxTouchPoints > 2);
+    }
+
+    function isStandalone() {
+      return navigator.standalone === true ||
+        window.matchMedia("(display-mode: standalone)").matches ||
+        window.matchMedia("(display-mode: fullscreen)").matches;
+    }
+
+    async function startGame() {
+      try {
+        updateLoading(0, "Preparing game files...");
+
+        const [dataUrl, wasmUrl] = await Promise.all([
+          mergeFiles(
+            getParts("Build/HTML.data.unityweb", 1, 9),
+            "game data",
+            0,
+            55
+          ),
+          mergeFiles(
+            getParts("Build/HTML.wasm.unityweb", 1, 2),
+            "game engine",
+            55,
+            70
+          )
+        ]);
+
+        updateLoading(72, "Starting Unity...");
+
+        const config = {
+          dataUrl: dataUrl,
+          frameworkUrl: "Build/HTML.framework.js.unityweb",
+          codeUrl: wasmUrl,
+          streamingAssetsUrl: "StreamingAssets",
+          companyName: "SmashGames",
+          productName: "Kindergarten2",
+          productVersion: "2.00",
+          showBanner: showBanner,
+          devicePixelRatio: isMobile() ? 1 : Math.min(window.devicePixelRatio || 1, 2)
+        };
+
+        if ("serviceWorker" in navigator && (isStandalone() || (isMobile() && !/iPhone|iPad|iPod/i.test(navigator.userAgent)))) {
+          navigator.serviceWorker.register("ServiceWorker.js").catch(() => {});
+        }
+
+        canvas.style.background =
+          "url('Build/HTML.jpg') center / cover";
+
+        const script = document.createElement("script");
+        script.src = "Build/HTML.loader.js";
+
+        script.onerror = () => {
+          throw new Error("Could not load the Unity loader script.");
+        };
+
+        script.onload = async () => {
+          try {
+            const unityInstance = await createUnityInstance(
+              canvas,
+              config,
+              progress => {
+                updateLoading(
+                  72 + progress * 28,
+                  progress < 1 ? "Loading game..." : "Finishing up..."
+                );
+              }
+            );
+
+            updateLoading(100, "Game ready!");
+
+            setTimeout(() => {
+              loadingScreen.style.opacity = "0";
+              setTimeout(() => loadingScreen.remove(), 400);
+            }, 250);
+
+            resizeGame();
+          } catch (error) {
+            console.error(error);
+            updateLoading(100, "Unable to start the game.");
+            loadingMB.textContent = formatMB(downloadedBytes) + " downloaded";
+            showBanner("Unity failed to initialize: " + error, "error");
+          }
+        };
+
+        document.body.appendChild(script);
+      } catch (error) {
+        console.error(error);
+        updateLoading(100, "Failed to download game files.");
+        loadingMB.textContent = formatMB(downloadedBytes) + " downloaded";
+        showBanner("Failed to load game files: " + error.message, "error");
+      }
+    }
+
+    startGame();
+  </script>
+</body>
+</html>
