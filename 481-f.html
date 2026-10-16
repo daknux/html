@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Baldi's Fun New School Plus Ultimate Edition</title>
+
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #unity-container,
+    #unity-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #unity-canvas {
+      display: block;
+      background: #000;
+    }
+
+    #unity-loading-bar {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    #unity-logo {
+      width: 154px;
+      height: 130px;
+      background: url('https://quizizz.com/_media/uploads/ded02d39-940f-4ef7-9057-971a8b77a750-v2') no-repeat center;
+    }
+
+    #unity-progress-bar-empty {
+      width: 141px;
+      height: 18px;
+      margin-top: 10px;
+      background: url('https://quizizz.com/_media/uploads/d90443e7-122a-4524-835c-0c3534b77fe6-v2') no-repeat center;
+    }
+
+    #unity-progress-bar-full {
+      width: 0;
+      height: 18px;
+      background: url('https://quizizz.com/_media/uploads/17989d80-0e94-4617-8b9e-59e725990e17-v2') no-repeat left center;
+    }
+
+    #unity-warning {
+      position: fixed;
+      top: 5%;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px;
+      background: white;
+      z-index: 10;
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="unity-container">
+    <canvas id="unity-canvas"></canvas>
+
+    <div id="unity-loading-bar">
+      <div id="unity-logo"></div>
+      <div id="unity-progress-bar-empty">
+        <div id="unity-progress-bar-full"></div>
+      </div>
+    </div>
+
+    <div id="unity-warning"></div>
+  </div>
+
+  <script>
+    const canvas = document.querySelector("#unity-canvas");
+    const loadingBar = document.querySelector("#unity-loading-bar");
+    const progressBar = document.querySelector("#unity-progress-bar-full");
+    const warningBanner = document.querySelector("#unity-warning");
+
+    function unityShowBanner(message, type) {
+      const banner = document.createElement("div");
+      banner.textContent = message;
+      banner.style.cssText = "padding:10px;background:" +
+        (type === "error" ? "red" : "yellow");
+
+      warningBanner.replaceChildren(banner);
+      warningBanner.style.display = "block";
+
+      if (type !== "error") {
+        setTimeout(() => {
+          banner.remove();
+          if (!warningBanner.children.length) {
+            warningBanner.style.display = "none";
+          }
+        }, 5000);
+      }
+    }
+
+    const config = {
+      dataUrl: "https://quizizz.com/_media/uploads/d4886e66-1357-4d94-a0f6-271849fcb4f9-v2",
+      frameworkUrl: "https://quizizz.com/_media/uploads/bab25594-bad6-4f11-b028-83586ec1cfe7-v2",
+      codeUrl: "https://quizizz.com/_media/uploads/11fffff2-ac1e-432a-af35-6bed31353399-v2",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "JohnsterSpaceGames",
+      productName: "Baldi's Fun New School Plus Ultimate Edition",
+      productVersion: "0.2.5b",
+      showBanner: unityShowBanner
+    };
+
+    canvas.style.background =
+      "url('https://quizizz.com/_media/uploads/a842d87e-1f4b-4683-80fe-4fe211a163d0-v2') center / cover";
+
+    const loader = document.createElement("script");
+    loader.src = "https://quizizz.com/_media/uploads/a4eafbd6-69ed-475f-8bc7-727b745c9f36-v2";
+
+    loader.onload = () => {
+      createUnityInstance(canvas, config, progress => {
+        progressBar.style.width = `${progress * 100}%`;
+      }).then(() => {
+        loadingBar.style.display = "none";
+      }).catch(error => {
+        unityShowBanner(String(error), "error");
+      });
+    };
+
+    loader.onerror = () => {
+      unityShowBanner("Failed to load the Unity WebGL loader.", "error");
+    };
+
+    document.body.appendChild(loader);
+  </script>
+</body>
+</html>
