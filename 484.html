@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>BALDI</title>
+  <style>
+    html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden; }
+    #loading-text {
+      color:#fff; font-size:48px; font-family:cursive;
+      text-align:center; margin-top:20px;
+    }
+    #unity-container { position:relative; width:100vw; height:100vh; }
+    #unity-canvas { background:#000; width:100%; height:100%; display:block; }
+    #unity-loading-bar { display:none; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+    #unity-progress-bar-empty { width:141px; height:18px; margin-top:10px; background:#333; border-radius:3px; overflow:hidden; }
+    #unity-progress-bar-full { width:0%; height:18px; background:#fff; transition:width .15s linear; }
+  </style>
+</head>
+<body>
+
+<div id="loading-text">LOADING...</div>
+
+<div id="unity-container">
+  <canvas id="unity-canvas" width="960" height="600"></canvas>
+  <div id="unity-loading-bar">
+    <div id="unity-progress-bar-empty">
+      <div id="unity-progress-bar-full"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+var DATA_URL      = "https://quizizz.com/_media/uploadedFiles/82f8c138-6100-47f4-85f3-599fe841b370-v2";
+var WASM_URL      = "https://quizizz.com/_media/uploadedFiles/644369cd-45f9-4c9d-9001-3f010f2ed662-v2";
+var FRAMEWORK_URL = "https://quizizz.com/_media/uploadedFiles/d9d45fd5-0177-4a13-8164-df01287dabde-v2";
+var LOADER_URL    = "https://quizizz.com/_media/uploadedFiles/1a0cef17-dc61-44df-8aed-e19437efccfa-v2";
+
+var loadingText     = document.querySelector("#loading-text");
+var canvas          = document.querySelector("#unity-canvas");
+var loadingBar      = document.querySelector("#unity-loading-bar");
+var progressBarFull = document.querySelector("#unity-progress-bar-full");
+
+function unityShowBanner(msg, type) {
+  console.log("[" + (type || "info") + "] " + msg);
+}
+
+var config = {
+  dataUrl:            DATA_URL,
+  frameworkUrl:       FRAMEWORK_URL,
+  codeUrl:            WASM_URL,
+  streamingAssetsUrl: "StreamingAssets",
+  companyName:        "Unknown",
+  productName:        "BALDI",
+  productVersion:     "1.0",
+  showBanner:         unityShowBanner
+};
+
+if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)){
+  var meta = document.createElement("meta");
+  meta.name = "viewport";
+  meta.content = "width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes";
+  document.getElementsByTagName("head")[0].appendChild(meta);
+}
+
+loadingBar.style.display = "block";
+
+fetch(LOADER_URL, { cache: "no-store" })
+  .then(function(r){
+    if (!r.ok) throw new Error("HTTP " + r.status + " loading BALDI.loader.js");
+    return r.text();
+  })
+  .then(function(src){
+    var blob = new Blob([src], { type: "application/javascript" });
+    var blobUrl = URL.createObjectURL(blob);
+    var script = document.createElement("script");
+    script.src = blobUrl;
+    script.onload = function(){
+      URL.revokeObjectURL(blobUrl);
+      createUnityInstance(canvas, config, function(progress){
+        progressBarFull.style.width = (100 * progress) + "%";
+        if (loadingText) loadingText.textContent = "LOADING... " + (progress*100).toFixed(1) + "%";
+      }).then(function(inst){
+        loadingBar.style.display = "none";
+        if (loadingText && loadingText.parentNode) loadingText.remove();
+        window.unityInstance = inst;
+      }).catch(function(m){
+        if (loadingText) loadingText.textContent = "FAILED: " + m;
+        console.error(m);
+      });
+    };
+    script.onerror = function(){
+      if (loadingText) loadingText.textContent = "FAILED to execute loader script";
+    };
+    document.body.appendChild(script);
+  })
+  .catch(function(e){
+    if (loadingText) loadingText.textContent = "FAILED to fetch loader.js: " + e.message;
+    console.error(e);
+  });
+
+})();
+</script>
+</body>
+</html>
