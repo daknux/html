@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>BaldiBaldsTheUniverse</title>
+
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #0b0b0b;
+        color: #f0f0f0;
+        font-family: -apple-system, system-ui, sans-serif;
+      }
+
+      #unity-canvas {
+        position: fixed;
+        inset: 0;
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        border: 0;
+        outline: none;
+      }
+
+      #loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: #0b0b0b;
+        font-size: 24px;
+        font-weight: 200;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        text-align: center;
+        pointer-events: none;
+        z-index: 10;
+      }
+    </style>
+  </head>
+
+  <body>
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+    <div id="loading">Loading... 0%</div>
+
+    <script>
+      const canvas = document.querySelector("#unity-canvas");
+      const loading = document.querySelector("#loading");
+
+      const root =
+        "https://cdn.jsdelivr.net/gh/reeyuki/BaldiBaldsTheUniversePort@bab7e27ee37b349e10c130d359ed461382a91595/";
+
+      const build = root + "Build/";
+
+      async function start() {
+        const fetchAsset = async (name, count) => {
+          const reqs = Array.from(
+            { length: count },
+            (_, i) =>
+              fetch(
+                build + name + i.toString().padStart(2, "0")
+              ).then((r) => {
+                if (!r.ok) {
+                  throw new Error(
+                    "Failed to load " + name + i
+                  );
+                }
+
+                return r.arrayBuffer();
+              })
+          );
+
+          const results = await Promise.all(reqs);
+
+          return URL.createObjectURL(
+            new Blob(results)
+          );
+        };
+
+        try {
+          const [dataUrl, codeUrl, frameworkUrl] =
+            await Promise.all([
+              fetchAsset(
+                "baldibaldstheuniverse.data",
+                5
+              ),
+              fetchAsset(
+                "baldibaldstheuniverse.wasm",
+                2
+              ),
+              fetch(
+                build +
+                  "baldibaldstheuniverse.framework.js"
+              )
+                .then((r) => {
+                  if (!r.ok) {
+                    throw new Error(
+                      "Failed to load Unity framework"
+                    );
+                  }
+
+                  return r.blob();
+                })
+                .then((b) => URL.createObjectURL(b)),
+            ]);
+
+          const script = document.createElement("script");
+
+          script.src =
+            build + "baldibaldstheuniverse.loader.js";
+
+          script.onerror = () => {
+            loading.innerText = "Error loading Unity loader";
+          };
+
+          script.onload = () => {
+            createUnityInstance(
+              canvas,
+              {
+                dataUrl,
+                codeUrl,
+                frameworkUrl,
+                streamingAssetsUrl:
+                  root + "StreamingAssets",
+                companyName: "Baldi Balds The Universe",
+                productName: "BaldiBaldsTheUniverse",
+                productVersion: "1.2.7",
+              },
+              (p) => {
+                loading.innerText =
+                  "Loading... " +
+                  Math.round(p * 100) +
+                  "%";
+              }
+            )
+              .then(() => {
+                loading.style.display = "none";
+              })
+              .catch((e) => {
+                console.error(e);
+                loading.innerText = "Error starting game";
+              });
+          };
+
+          document.body.appendChild(script);
+        } catch (e) {
+          console.error(e);
+          loading.innerText = "Error loading assets";
+        }
+      }
+
+      start();
+    </script>
+  </body>
+</html>
