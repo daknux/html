@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  
+  <title>-3 Remastred</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    #unity-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #unity-canvas {
+      display: none;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      outline: none;
+    }
+
+    #loading {
+      width: min(320px, 85vw);
+      text-align: center;
+    }
+
+    #loading-title {
+      margin-bottom: 36px;
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: 8px;
+    }
+
+    #progress-text {
+      margin-bottom: 16px;
+      color: #aaa;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    #progress-bar {
+      width: 100%;
+      height: 4px;
+      overflow: hidden;
+      background: #292929;
+      border-radius: 4px;
+    }
+
+    #progress-fill {
+      width: 0;
+      height: 100%;
+      background: #fff;
+      transition: width 0.2s ease;
+    }
+
+    #loading-footer {
+      margin-top: 18px;
+      color: #555;
+      font-size: 10px;
+      letter-spacing: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div id="unity-container">
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+
+    <div id="loading">
+      <div id="loading-title">-3 Remastred</div>
+      <div id="progress-text">Initializing...</div>
+
+      <div id="progress-bar">
+        <div id="progress-fill"></div>
+      </div>
+
+      <div id="loading-footer">PLEASE WAIT</div>
+    </div>
+  </div>
+
+  <script>
+    const ROOT = "https://cdn.jsdelivr.net/gh/matheveryday25/math@latest/minusthreev2/";
+    const BUILD = ROOT + "Build/";
+
+    const ASSETS = {
+      loader: "minusthree.loader.js",
+      framework: "minusthree.framework.js.unityweb",
+      wasm: "minusthree.wasm.unityweb",
+      dataName: "minusthree.data.unityweb",
+      dataCount: 4
+    };
+
+    const canvas = document.querySelector("#unity-canvas");
+    const loading = document.querySelector("#loading");
+    const progressText = document.querySelector("#progress-text");
+    const progressFill = document.querySelector("#progress-fill");
+
+    async function start() {
+      try {
+        const paths = [
+          BUILD + ASSETS.loader,
+          BUILD + ASSETS.framework,
+          BUILD + ASSETS.wasm
+        ];
+
+        for (let i = 0; i < ASSETS.dataCount; i++) {
+          paths.push(
+            `${BUILD}${ASSETS.dataName}${String(i).padStart(2, "0")}`
+          );
+        }
+
+        let loaded = 0;
+
+        const results = await Promise.all(
+          paths.map(async path => {
+            const response = await fetch(path);
+
+            if (!response.ok) {
+              throw new Error(`Failed to load: ${path}`);
+            }
+
+            const buffer = await response.arrayBuffer();
+
+            loaded++;
+
+            const percent = Math.round(loaded / paths.length * 100);
+
+            progressText.textContent = `Loading assets · ${percent}%`;
+            progressFill.style.width = percent + "%";
+
+            return buffer;
+          })
+        );
+
+        const [loaderBuffer, frameworkBuffer, wasmBuffer, ...dataChunks] = results;
+
+        const dataUrl = URL.createObjectURL(new Blob(dataChunks));
+        const frameworkUrl = URL.createObjectURL(
+          new Blob([frameworkBuffer])
+        );
+        const wasmUrl = URL.createObjectURL(
+          new Blob([wasmBuffer], { type: "application/wasm" })
+        );
+
+        const script = document.createElement("script");
+        script.src = URL.createObjectURL(new Blob([loaderBuffer]));
+
+        script.onload = async () => {
+          try {
+            progressText.textContent = "Preparing game...";
+
+            await createUnityInstance(canvas, {
+              dataUrl,
+              frameworkUrl,
+              codeUrl: wasmUrl,
+              streamingAssetsUrl: ROOT + "StreamingAssets",
+              companyName: "JosephPLover",
+              productName: "MINUS THREE",
+              productVersion: "-3.6"
+            }, progress => {
+              const percent = Math.round(progress * 100);
+
+              progressText.textContent = `Starting game · ${percent}%`;
+              progressFill.style.width = percent + "%";
+            });
+
+            loading.remove();
+            canvas.style.display = "block";
+            canvas.focus();
+          } catch (error) {
+            showError(error);
+          }
+        };
+
+        script.onerror = () => {
+          showError(new Error("Failed to load Unity loader."));
+        };
+
+        document.body.appendChild(script);
+      } catch (error) {
+        showError(error);
+      }
+    }
+
+    function showError(error) {
+      progressText.textContent = "LOAD FAILED";
+      progressText.style.color = "#ff5555";
+      document.querySelector("#loading-footer").textContent =
+        "PLEASE REFRESH AND TRY AGAIN";
+
+      console.error(error);
+    }
+
+    start();
+  </script>
+</body>
+</html>
