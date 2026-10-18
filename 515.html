@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OVENLESS BROWNIES</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background-color: #000; }
+    #unityContainer { width: 100vw; height: 100vh; display: block; }
+    canvas { width: 100%; height: 100%; display: block; }
+  </style>
+</head>
+<body>
+  <div id="unityContainer"></div>
+  <script>
+  (async function () {
+    var UNITY_LOADER_URL = "https://quizizz.com/_media/uploads/b62e935d-4d0b-47d2-b11c-1df9ae927fb0-v2";
+
+    var BUILD_FILES = {
+      "ff9f32a5-05ba-4fc3-ae9e-29514d94c265": "https://quizizz.com/_media/uploads/ff9f32a5-05ba-4fc3-ae9e-29514d94c265-v2",
+      "5f930c61-4960-4d84-87a6-774772fa0f83": "https://quizizz.com/_media/uploads/5f930c61-4960-4d84-87a6-774772fa0f83-v2",
+      "cbfda273-8df7-4226-9e39-2a7fdaa3b852": "https://quizizz.com/_media/uploads/cbfda273-8df7-4226-9e39-2a7fdaa3b852-v2"
+    };
+
+    var STREAMING_ASSETS = {
+      "me and bro.mp4":   "https://quizizz.com/_media/uploads/0c577cb3-b80f-43d8-83d7-345a672af68a-v2",
+      "result.m4v":       "https://quizizz.com/_media/uploads/80d3ec6a-0c7a-4160-9431-2c5b9e65ed1e-v2",
+      "result2.m4v":      "https://quizizz.com/_media/uploads/1895ac98-440b-4fee-96e9-dfb246cac29b-v2",
+      "warning+dead.m4v": "https://quizizz.com/_media/uploads/4bff1e65-4fcb-4656-9caf-cf6ac4a70225-v2",
+      "warning.mp4":      "https://quizizz.com/_media/uploads/324350fe-8cd7-4842-8c57-ae0692e5efe5-v2"
+    };
+
+    var STREAMING_MIMES = {
+      "mp4": "video/mp4",
+      "m4v": "video/mp4",
+      "webm": "video/webm",
+      "ogv": "video/ogg",
+      "ogg": "video/ogg"
+    };
+
+    var streamingBlobUrls = {};
+
+    function mimeFor(name) {
+      var ext = name.split('.').pop().toLowerCase();
+      return STREAMING_MIMES[ext] || 'application/octet-stream';
+    }
+
+    async function prefetchStreamingAssets() {
+      var jobs = [];
+      for (var name in STREAMING_ASSETS) {
+        (function (n) {
+          jobs.push(
+            fetch(STREAMING_ASSETS[n])
+              .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.arrayBuffer();
+              })
+              .then(function (buf) {
+                streamingBlobUrls[n.toLowerCase()] = URL.createObjectURL(
+                  new Blob([buf], { type: mimeFor(n) })
+                );
+              })
+              .catch(function (e) {
+                console.warn('[prefetch] ' + n + ' failed: ' + e.message);
+              })
+          );
+        })(name);
+      }
+      await Promise.all(jobs);
+    }
+
+    function findBuildUrl(u) {
+      var s = String(u);
+      for (var uuid in BUILD_FILES) {
+        if (s.indexOf(uuid) !== -1) return BUILD_FILES[uuid];
+      }
+      return null;
+    }
+
+    function findStreamingUrl(u) {
+      var s = String(u).toLowerCase();
+      var idx = s.indexOf('streamingassets/');
+      if (idx === -1) return null;
+      var after = s.substring(idx + 'streamingassets/'.length).split('?')[0].split('#')[0];
+
+      var candidates = [after];
+      try { candidates.push(decodeURIComponent(after)); } catch (e) {}
+      candidates.push(after.replace(/\+/g, ' '));
+      try { candidates.push(decodeURIComponent(after.replace(/\+/g, ' '))); } catch (e) {}
+
+      for (var i = 0; i < candidates.length; i++) {
+        var c = candidates[i].toLowerCase();
+        if (streamingBlobUrls[c]) return streamingBlobUrls[c];
+        if (STREAMING_ASSETS[c]) return STREAMING_ASSETS[c];
+      }
+
+      var filename = after.split('/').pop();
+      var dot = filename.lastIndexOf('.');
+      var stem = dot > 0 ? filename.substring(0, dot) : filename;
+      var exts = ['mp4', 'm4v', 'webm', 'ogv'];
+      for (var j = 0; j < exts.length; j++) {
+        var tryKey = (stem + '.' + exts[j]).toLowerCase();
+        if (tryKey === filename) continue;
+        if (streamingBlobUrls[tryKey]) return streamingBlobUrls[tryKey];
+        if (STREAMING_ASSETS[tryKey]) return STREAMING_ASSETS[tryKey];
+      }
+
+      return null;
+    }
+
+    function resolveAny(u) {
+      if (!u) return null;
+      var s = String(u).replace(/^\s+/, '');
+      var lower = s.toLowerCase();
+      if (lower.indexOf('javascript:') === 0) return null;
+
+      var streaming = findStreamingUrl(s);
+      if (streaming) return streaming;
+
+      if (lower.indexOf('data:') === 0) return null;
+      if (lower.indexOf('blob:') === 0) return null;
+
+      return findBuildUrl(s);
+    }
+
+    var nativeFetch = window.fetch;
+    window.fetch = function (input, init) {
+      var urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+      var mapped = resolveAny(urlStr);
+      if (mapped) return nativeFetch(mapped, init);
+      return nativeFetch(input, init);
+    };
+
+    var nativeXhrOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (method, url) {
+      var mapped = resolveAny(url);
+      if (mapped) url = mapped;
+      var args = Array.prototype.slice.call(arguments);
+      args[1] = url;
+      return nativeXhrOpen.apply(this, args);
+    };
+
+    function patchSrc(proto) {
+      var desc = Object.getOwnPropertyDescriptor(proto, 'src');
+      if (!desc) return;
+      Object.defineProperty(proto, 'src', {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return desc.get.call(this); },
+        set: function (val) {
+          var mapped = resolveAny(val);
+          desc.set.call(this, mapped || val);
+        }
+      });
+    }
+    patchSrc(HTMLMediaElement.prototype);
+    patchSrc(HTMLSourceElement.prototype);
+
+    var nativeSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+      if (name && String(name).toLowerCase() === 'src' && typeof value === 'string') {
+        var mapped = resolveAny(value);
+        if (mapped) value = mapped;
+      }
+      return nativeSetAttribute.call(this, name, value);
+    };
+
+    var config = {
+      companyName: "Wantho",
+      productName: "OVENLESS BROWNIES",
+      productVersion: "1.0",
+      dataUrl: BUILD_FILES["ff9f32a5-05ba-4fc3-ae9e-29514d94c265"],
+      wasmCodeUrl: BUILD_FILES["5f930c61-4960-4d84-87a6-774772fa0f83"],
+      wasmFrameworkUrl: BUILD_FILES["cbfda273-8df7-4226-9e39-2a7fdaa3b852"],
+      graphicsAPI: ["WebGL 2.0", "WebGL 1.0"],
+      webglContextAttributes: { preserveDrawingBuffer: false },
+      splashScreenStyle: "Dark",
+      backgroundColor: "#000000",
+      developmentBuild: false,
+      multithreading: false,
+      unityVersion: "2019.2.8f1"
+    };
+
+    try {
+      await prefetchStreamingAssets();
+
+      var loaderRes = await fetch(UNITY_LOADER_URL);
+      if (!loaderRes.ok) throw new Error('UnityLoader fetch failed: ' + loaderRes.status);
+      var loaderText = await loaderRes.text();
+      if (loaderText.trimStart && loaderText.trimStart().startsWith('<')) {
+        throw new Error('UnityLoader returned HTML instead of JS');
+      }
+
+      var blobUrl = URL.createObjectURL(new Blob([loaderText], { type: 'application/javascript' }));
+      var script = document.createElement('script');
+      script.src = blobUrl;
+      script.onload = function () {
+        var configUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(config));
+        UnityLoader.instantiate("unityContainer", configUrl);
+      };
+      script.onerror = function () {
+        document.getElementById('unityContainer').textContent = 'Failed to load UnityLoader';
+      };
+      document.head.appendChild(script);
+    } catch (e) {
+      console.error(e);
+      document.getElementById('unityContainer').textContent = 'Error: ' + e.message;
+    }
+  })();
+  </script>
+</body>
+</html>
