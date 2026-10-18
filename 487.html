@@ -1,0 +1,2440 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
+  <base href="https://cdn.jsdelivr.net/gh/ant9012/sonic-time-twisted-web@main/">
+
+  <meta name="viewport"
+        content="viewport-fit=cover,width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1">
+
+  <link rel="icon" type="image/x-icon" href="favicon.png">
+
+  <title>Sonic Time Twisted Web Port</title>
+
+  <style>
+    /* =========================================================
+       PERFORMANCE-FOCUSED CSS
+       ========================================================= */
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    body {
+      min-width: 100%;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: Arial, sans-serif;
+      overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    body.scrollingDisabled {
+      overflow: hidden;
+    }
+
+    /*
+      Keep the canvas pixelated without expensive filters.
+      IMPORTANT:
+      We do NOT force the internal canvas to 1920x1080.
+    */
+    canvas.emscripten {
+      display: none;
+      position: relative;
+      padding: 0;
+      border: 0;
+      margin: 0;
+      background: #000;
+
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+
+      /*
+        Avoid opacity transitions during gameplay.
+        These can cause unnecessary compositing work.
+      */
+      opacity: 1;
+
+      /*
+        Prevent the browser from trying to scroll/gesture
+        when interacting with the game canvas.
+      */
+      touch-action: none;
+
+      /*
+        Tell the browser this element is heavily updated.
+      */
+      contain: strict;
+    }
+
+    canvas.active {
+      display: block;
+      opacity: 1;
+    }
+
+    canvas.paused {
+      /*
+        The old version applied blur + grayscale here.
+        Filters can be expensive on Chromebooks, so pause
+        simply dims the canvas instead.
+      */
+      opacity: 0.75;
+    }
+
+    canvas.unpaused {
+      opacity: 1;
+    }
+
+    /* Loading screen */
+
+    .loading {
+      position: fixed;
+      inset: 0;
+
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+
+      pointer-events: none;
+      z-index: 10;
+
+      background: #000;
+    }
+
+    .loading > * {
+      margin: 8px;
+    }
+
+    .spinner {
+      width: 30px;
+      height: 30px;
+
+      border: 5px solid #bdff00;
+      border-top-color: #719900;
+      border-radius: 50%;
+
+      animation: rotation 0.8s linear infinite;
+    }
+
+    @keyframes rotation {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .emscripten {
+      display: block;
+      text-align: center;
+      font-family: "Lucida Console", Monaco, monospace;
+    }
+
+    #status {
+      color: white;
+      font-weight: bold;
+      min-height: 18px;
+    }
+
+    #progress {
+      width: 250px;
+      height: 10px;
+      padding: 0;
+      border: 0;
+    }
+
+    progress[value]::-webkit-progress-bar {
+      background: #8492a6;
+      border-radius: 15px;
+    }
+
+    progress[value]::-webkit-progress-value {
+      background: linear-gradient(
+        to right,
+        #719900,
+        #bdff00
+      );
+      border-radius: 15px;
+    }
+
+
+    /* =========================================================
+       TOUCH CONTROLS
+       ========================================================= */
+
+    #touchControls {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      pointer-events: none;
+      display: block;
+      touch-action: none;
+    }
+
+    .touch-button {
+      position: absolute;
+      width: 76px;
+      height: 76px;
+      padding: 0;
+      margin: 0;
+      border: 2px solid rgba(210,210,210,.62);
+      border-radius: 16px;
+      background: rgba(45,45,45,.78);
+      color: #fff;
+      font-family: Arial, sans-serif;
+      font-size: 34px;
+      font-weight: bold;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: .88;
+      pointer-events: auto;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      box-shadow: inset 0 1px 1px rgba(255,255,255,.08);
+    }
+
+    .touch-button.pressed,
+    .touch-button:active {
+      opacity: 1;
+      background: rgba(110,110,110,.86);
+      transform: none;
+    }
+
+    /* Connected cross-shaped D-pad, like the reference image. */
+    #touchUp    { left: 72px;  bottom: 100px; border-radius: 18px 18px 4px 4px; }
+    #touchLeft  { left: 6px;   bottom: 34px;  border-radius: 18px 4px 4px 18px; }
+    #touchRight { left: 138px; bottom: 34px;  border-radius: 4px 18px 18px 4px; }
+    #touchDown  { left: 72px;  bottom: 0;     border-radius: 4px 4px 18px 18px; }
+
+    #touchJump  { right: 24px; bottom: 24px; }
+    #touchPause { right: 24px; bottom: 122px; }
+    .touch-action { font-size: 18px; }
+
+    @media (orientation: landscape) and (max-height: 500px) {
+      #touchUp    { left: 58px;  bottom: 86px; }
+      #touchLeft  { left: 0;     bottom: 20px; }
+      #touchRight { left: 116px; bottom: 20px; }
+      #touchDown  { left: 58px;  bottom: -14px; }
+      #touchJump  { right: 14px; bottom: 14px; }
+      #touchPause { right: 14px; bottom: 94px; }
+    }
+
+    #pauseMenuContainer { z-index: 50; }
+
+    /* Bottom controls */
+
+    .output-container {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+
+      padding: 5px;
+
+      z-index: 20;
+      pointer-events: auto;
+    }
+
+    .output-button {
+      width: 200px;
+      height: 25px;
+
+      margin: 5px;
+
+      border: 0;
+      border-radius: 5px;
+
+      background: #000;
+      color: #fff;
+
+      outline: 1px dashed #20c20e;
+
+      font-family: "Lucida Console", Monaco, monospace;
+      cursor: pointer;
+
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .output-button:active {
+      opacity: 0.7;
+    }
+
+    #output {
+      display: none;
+
+      width: 100%;
+      height: 200px;
+
+      padding: 0;
+
+      border: 0;
+      outline: none;
+
+      resize: none;
+
+      background: #000;
+      color: #fff;
+
+      font-family: "Lucida Console", Monaco, monospace;
+
+      /*
+        Don't repaint the textarea while the game runs.
+      */
+      contain: strict;
+    }
+
+    /* Messages */
+
+    #message-container {
+      display: none;
+
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+
+      min-height: 50px;
+
+      background: rgba(20,20,20,.5);
+
+      z-index: 30;
+    }
+
+    #messages {
+      margin-left: 50px;
+
+      color: #fff;
+
+      font-family: "Lucida Console", Monaco, monospace;
+    }
+
+    /* Pause menu */
+
+    #pauseMenuContainer {
+      position: fixed;
+      inset: 0;
+
+      display: flex;
+      justify-content: center;
+      align-items: center;
+
+      z-index: 50;
+
+      pointer-events: auto;
+    }
+
+    #pauseMenuContainer[hidden] {
+      display: none !important;
+    }
+
+    #pauseMenuBorder {
+      width: min(70vw, 400px);
+
+      padding: 1px;
+
+      background: linear-gradient(
+        135deg,
+        #FA1E4E,
+        transparent 40%
+      );
+
+      border-radius: 4px;
+
+      clip-path: polygon(
+        10.5px 0,
+        100% 0,
+        100% 100%,
+        0 100%,
+        0 10.5px
+      );
+    }
+
+    #pauseMenu {
+      display: flex;
+      flex-direction: column;
+
+      padding: 60px 30px;
+
+      background: linear-gradient(
+        180deg,
+        #2E273F 16.15%,
+        rgba(46,39,63,.79) 56.25%,
+        #2E273F 91.15%
+      );
+
+      border-radius: 4px;
+
+      clip-path: polygon(
+        10px 0,
+        100% 0,
+        100% 100%,
+        0 100%,
+        0 10px
+      );
+    }
+
+    #pauseMenu button {
+      padding: 12px 24px;
+      margin: 5px 0;
+
+      border: 1px solid #FA1E4E;
+      border-radius: 6px;
+
+      background: #FA1E4E;
+      color: #fff;
+
+      font-size: 17px;
+      font-weight: 500;
+
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    #pauseMenu button#quitButton {
+      background: #FA1E4E40;
+    }
+
+    #pauseMenu button:active {
+      opacity: .75;
+    }
+
+    #pauseMenu button[hidden] {
+      display: none;
+    }
+
+    #colorpicker {
+      width: 45px;
+      height: 25px;
+      margin: 5px;
+    }
+
+    /*
+      Chromebook / small screen optimization.
+      Hide the debug controls on very small screens.
+    */
+    @media (max-width: 600px) {
+      .output-container {
+        display: none;
+      }
+
+      #pauseMenuBorder {
+        width: 85vw;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .spinner {
+        animation: none;
+      }
+    }
+  </style>
+
+  <!-- Start downloading the engine as early as possible. -->
+  <link rel="preload"
+        href="runner.js"
+        as="script"
+        crossorigin>
+
+</head>
+
+<body>
+
+  <!-- =======================================================
+       GAME CANVAS
+       ======================================================= -->
+
+  <canvas
+    class="emscripten"
+    id="canvas"
+    tabindex="-1"
+    oncontextmenu="event.preventDefault()">
+  </canvas>
+
+
+  <!-- =======================================================
+       TOUCH CONTROLS
+       ======================================================= -->
+
+  <div id="touchControls" aria-hidden="true">
+    <button class="touch-button" id="touchUp" type="button" aria-label="Up">▲</button>
+    <button class="touch-button" id="touchLeft" type="button" aria-label="Left">◀</button>
+    <button class="touch-button" id="touchDown" type="button" aria-label="Down">▼</button>
+    <button class="touch-button" id="touchRight" type="button" aria-label="Right">▶</button>
+
+    <button class="touch-button touch-action" id="touchJump" type="button" aria-label="Jump">A</button>
+    <button class="touch-button touch-action" id="touchPause" type="button" aria-label="Pause">ENTER</button>
+  </div>
+
+  <!-- =======================================================
+       PAUSE MENU
+       ======================================================= -->
+
+  <div id="pauseMenuContainer" hidden>
+
+    <div id="pauseMenuBorder">
+
+      <div id="pauseMenu">
+
+        <button
+          id="resumeButton"
+          type="button"
+          onclick="resume()">
+          Resume
+        </button>
+
+        <button
+          id="quitButton"
+          type="button"
+          onclick="quitIfSupported()">
+          Quit
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- =======================================================
+       LOADING SCREEN
+       ======================================================= -->
+
+  <div class="loading" id="loading">
+
+    <div
+      class="spinner"
+      id="spinner">
+    </div>
+
+    <div
+      class="emscripten"
+      id="status">
+      Downloading...
+    </div>
+
+    <progress
+      value="0"
+      max="100"
+      id="progress"
+      hidden>
+    </progress>
+
+  </div>
+
+
+  <!-- =======================================================
+       DEBUG / EXTRA BUTTONS
+       ======================================================= -->
+
+  <div
+    class="output-container"
+    id="output-container">
+
+    <button
+      class="output-button"
+      type="button"
+      onclick="toggleConsole()"
+      title="Lists Console Output and Loading Progress">
+      Toggle Console
+    </button>
+
+    <button
+      id="QRButton"
+      class="output-button"
+      type="button"
+      onclick="togglegithub()"
+      title="Sends you to the source Github Repository of this Project">
+      Visit Github Repo
+    </button>
+
+    <button
+      id="QR2Button"
+      class="output-button"
+      type="button"
+      onclick="toggleclear_site_cache()"
+      title="Fixes crashes due to the website being updated, but also deletes ALL saves">
+      Clear Site Cache
+    </button>
+
+    <button
+      class="output-button"
+      id="stats-button"
+      type="button"
+      onclick="toggleFPS()"
+      title="Enables External FPS Counter">
+      Enable FPS Counter
+    </button>
+
+    <button
+      class="output-button"
+      id="share-button"
+      type="button"
+      onclick="togglewebports()"
+      title="Sends you to my personal website with a list of all my web ports">
+      View All Web Ports
+    </button>
+
+    <input
+      id="colorpicker"
+      type="color"
+      value="#000000"
+      onchange="changecolor(this)"
+      title="Changes Color of the Website's Background">
+
+    <textarea
+      id="output"
+      rows="8"
+      spellcheck="false">
+    </textarea>
+
+  </div>
+
+
+  <!-- =======================================================
+       MESSAGE CONTAINER
+       ======================================================= -->
+
+  <div id="message-container">
+    <div id="messages"></div>
+  </div>
+
+
+  <!-- =======================================================
+       ADS
+       ======================================================= -->
+
+  <script
+    async
+    data-ad-client="ca-pub-123"
+    data-ad-frequency-hint="30s"
+    data-adbreak-test="on"
+    src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js">
+  </script>
+
+  <script>
+    window.adsbygoogle = window.adsbygoogle || [];
+
+    const adBreak = adConfig = function(o) {
+      adsbygoogle.push(o);
+    };
+  </script>
+
+
+  <!-- =======================================================
+       GAME.UNX MULTI-PART LOADER
+       =======================================================
+
+       The game.unx file is split into four parts.
+
+       The important optimization here is that all four
+       pieces are downloaded concurrently.
+
+       We also cache the combined result so that repeated
+       requests don't download and join the four pieces again.
+       ======================================================= -->
+
+  <script>
+  (() => {
+
+    "use strict";
+
+    const TARGET_FILE = "game.unx";
+    const NUM_PARTS = 4;
+
+    const combinedCache = new Map();
+    const pendingRequests = new Map();
+
+    const originalFetch = window.fetch.bind(window);
+    const OriginalXHR = window.XMLHttpRequest;
+
+
+    async function fetchAndCombine(baseUrl) {
+
+      /*
+        Reuse a completed result.
+      */
+      if (combinedCache.has(baseUrl)) {
+        return combinedCache.get(baseUrl);
+      }
+
+      /*
+        If multiple requests arrive at the same time,
+        only perform the expensive join once.
+      */
+      if (pendingRequests.has(baseUrl)) {
+        return pendingRequests.get(baseUrl);
+      }
+
+      const promise = (async () => {
+
+        const urls = new Array(NUM_PARTS);
+
+        for (let i = 0; i < NUM_PARTS; i++) {
+          urls[i] = `${baseUrl}.part${i + 1}`;
+        }
+
+        /*
+          Download all four pieces concurrently.
+        */
+        const responses = await Promise.all(
+          urls.map(url => originalFetch(url))
+        );
+
+        for (const response of responses) {
+
+          if (!response.ok) {
+            throw new Error(
+              `Failed to download part: ${response.url}`
+            );
+          }
+
+        }
+
+        /*
+          Read the four files concurrently.
+        */
+        const buffers = await Promise.all(
+          responses.map(response => response.arrayBuffer())
+        );
+
+        let totalLength = 0;
+
+        for (const buffer of buffers) {
+          totalLength += buffer.byteLength;
+        }
+
+        /*
+          Only one combined allocation.
+        */
+        const combined = new Uint8Array(totalLength);
+
+        let offset = 0;
+
+        for (const buffer of buffers) {
+
+          combined.set(
+            new Uint8Array(buffer),
+            offset
+          );
+
+          offset += buffer.byteLength;
+
+        }
+
+        const result = combined.buffer;
+
+        /*
+          Cache the combined result for this page session.
+        */
+        combinedCache.set(baseUrl, result);
+
+        pendingRequests.delete(baseUrl);
+
+        return result;
+
+      })().catch(error => {
+
+        pendingRequests.delete(baseUrl);
+        throw error;
+
+      });
+
+      pendingRequests.set(baseUrl, promise);
+
+      return promise;
+    }
+
+
+    /*
+      FETCH PATCH
+    */
+
+    window.fetch = async function(input, init) {
+
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof Request
+            ? input.url
+            : "";
+
+      if (url.endsWith(TARGET_FILE)) {
+
+        try {
+
+          const combinedBuffer =
+            await fetchAndCombine(url);
+
+          return new Response(
+            combinedBuffer,
+            {
+              status: 200,
+              statusText: "OK",
+              headers: {
+                "Content-Type":
+                  "application/octet-stream"
+              }
+            }
+          );
+
+        } catch (error) {
+
+          console.error(
+            "Fetch patch failed for game.unx:",
+            error
+          );
+
+        }
+
+      }
+
+      return originalFetch(input, init);
+    };
+
+
+    /*
+      XHR PATCH
+      GameMaker can use XHR instead of fetch.
+    */
+
+    window.XMLHttpRequest = function() {
+
+      const xhr = new OriginalXHR();
+
+      const originalOpen = xhr.open.bind(xhr);
+      const originalSend = xhr.send.bind(xhr);
+
+      let isTarget = false;
+      let targetUrl = "";
+
+
+      xhr.open = function(method, url, ...args) {
+
+        targetUrl = String(url);
+
+        isTarget =
+          targetUrl.endsWith(TARGET_FILE);
+
+        return originalOpen(
+          method,
+          url,
+          ...args
+        );
+      };
+
+
+      xhr.send = function(data) {
+
+        if (!isTarget) {
+          return originalSend(data);
+        }
+
+
+        fetchAndCombine(targetUrl)
+          .then(buffer => {
+
+            /*
+              Reproduce the minimum XHR state needed
+              by the GameMaker loader.
+            */
+
+            Object.defineProperty(
+              xhr,
+              "readyState",
+              {
+                value: 4,
+                configurable: true
+              }
+            );
+
+            Object.defineProperty(
+              xhr,
+              "status",
+              {
+                value: 200,
+                configurable: true
+              }
+            );
+
+            Object.defineProperty(
+              xhr,
+              "statusText",
+              {
+                value: "OK",
+                configurable: true
+              }
+            );
+
+
+            let responseValue = buffer;
+
+
+            if (xhr.responseType === "blob") {
+
+              responseValue =
+                new Blob([buffer]);
+
+            } else if (
+              xhr.responseType === "text" ||
+              !xhr.responseType
+            ) {
+
+              responseValue =
+                new TextDecoder().decode(buffer);
+
+              Object.defineProperty(
+                xhr,
+                "responseText",
+                {
+                  value: responseValue,
+                  configurable: true
+                }
+              );
+
+            }
+
+
+            Object.defineProperty(
+              xhr,
+              "response",
+              {
+                value: responseValue,
+                configurable: true
+              }
+            );
+
+
+            if (
+              typeof xhr.onreadystatechange ===
+              "function"
+            ) {
+              xhr.onreadystatechange();
+            }
+
+            if (
+              typeof xhr.onload ===
+              "function"
+            ) {
+              xhr.onload();
+            }
+
+          })
+          .catch(error => {
+
+            console.error(
+              "XHR patch failed for game.unx:",
+              error
+            );
+
+            Object.defineProperty(
+              xhr,
+              "status",
+              {
+                value: 500,
+                configurable: true
+              }
+            );
+
+            if (
+              typeof xhr.onerror ===
+              "function"
+            ) {
+              xhr.onerror(error);
+            }
+
+          });
+
+      };
+
+
+      return xhr;
+    };
+
+
+    window.XMLHttpRequest.prototype =
+      OriginalXHR.prototype;
+
+  })();
+  </script>
+
+
+
+  <!-- =======================================================
+       TOUCH INPUT BRIDGE
+       ======================================================= -->
+
+  <script>
+  (() => {
+    "use strict";
+
+    const touchButtons = [
+      ["touchLeft",  "ArrowLeft",  37],
+      ["touchUp",    "ArrowUp",    38],
+      ["touchRight", "ArrowRight", 39],
+      ["touchDown",  "ArrowDown",  40],
+      ["touchJump",  "a",           65],
+      ["touchPause", "Enter",       13]
+    ];
+
+    function makeKeyEvent(type, key, keyCode) {
+      const event = new KeyboardEvent(type, {
+        key: key,
+        code: key === "a" ? "KeyA" : (key === "z" ? "KeyZ" : key),
+        bubbles: true,
+        cancelable: true
+      });
+
+      /*
+       * GameMaker/Emscripten uses legacy keyCode/which values for
+       * some keyboard inputs. KeyboardEvent's constructor does not
+       * reliably populate those properties, especially for Z, so
+       * explicitly define them.
+       */
+      try {
+        Object.defineProperty(event, "keyCode", {
+          value: keyCode,
+          enumerable: true
+        });
+        Object.defineProperty(event, "which", {
+          value: keyCode,
+          enumerable: true
+        });
+      } catch (_) {}
+
+      return event;
+    }
+
+    function sendKey(type, key, keyCode) {
+      const event = makeKeyEvent(type, key, keyCode);
+      window.dispatchEvent(event);
+
+      const canvas = document.getElementById("canvas");
+      if (canvas) {
+        canvas.dispatchEvent(makeKeyEvent(type, key, keyCode));
+      }
+    }
+
+    function releaseAll() {
+      for (const [id, key, code] of touchButtons) {
+        const button = document.getElementById(id);
+        if (button && button.classList.contains("pressed")) {
+          button.classList.remove("pressed");
+          sendKey("keyup", key, code);
+        }
+      }
+    }
+
+    for (const [id, key, code] of touchButtons) {
+      const button = document.getElementById(id);
+      if (!button) continue;
+
+      button.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (button.classList.contains("pressed")) return;
+
+        button.classList.add("pressed");
+
+        try {
+          button.setPointerCapture(event.pointerId);
+        } catch (_) {}
+
+        sendKey("keydown", key, code);
+      }, { passive: false });
+
+      const release = event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (!button.classList.contains("pressed")) return;
+
+        button.classList.remove("pressed");
+        sendKey("keyup", key, code);
+      };
+
+      button.addEventListener("pointerup", release, { passive: false });
+      button.addEventListener("pointercancel", release, { passive: false });
+      button.addEventListener("lostpointercapture", release, { passive: false });
+      button.addEventListener("contextmenu", event => event.preventDefault());
+    }
+
+    window.addEventListener("blur", releaseAll);
+    window.addEventListener("orientationchange", releaseAll);
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) releaseAll();
+    });
+
+    const touchControls = document.getElementById("touchControls");
+
+    if (touchControls) {
+      for (const type of ["touchstart", "touchmove", "touchend", "touchcancel"]) {
+        touchControls.addEventListener(type, event => {
+          event.preventDefault();
+        }, { passive: false });
+      }
+    }
+  })();
+  </script>
+
+  <!-- =======================================================
+       MAIN GAME SCRIPT
+       ======================================================= -->
+
+  <script>
+  "use strict";
+
+
+  /* =========================================================
+     DOM REFERENCES
+     ========================================================= */
+
+  const bodyElement =
+    document.body;
+
+  const statusElement =
+    document.getElementById("status");
+
+  const progressElement =
+    document.getElementById("progress");
+
+  const spinnerElement =
+    document.getElementById("spinner");
+
+  const loadingElement =
+    document.getElementById("loading");
+
+  const canvasElement =
+    document.getElementById("canvas");
+
+  const outputElement =
+    document.getElementById("output");
+
+  const outputContainerElement =
+    document.getElementById("output-container");
+
+  const pauseMenu =
+    document.getElementById(
+      "pauseMenuContainer"
+    );
+
+  const quitButton =
+    document.getElementById(
+      "quitButton"
+    );
+
+  const messageContainerElement =
+    document.getElementById(
+      "message-container"
+    );
+
+  const messagesElement =
+    document.getElementById(
+      "messages"
+    );
+
+
+  /* =========================================================
+     PERFORMANCE SETTINGS
+     ========================================================= */
+
+  /*
+    IMPORTANT:
+
+    The old HTML explicitly did:
+
+      canvas.width = 1920;
+      canvas.height = 1080;
+
+    That has been removed.
+
+    We allow GameMaker to decide its internal resolution.
+  */
+
+  const CHANGE_ASPECT_RATIO = true;
+
+
+  let startingHeight;
+  let startingWidth;
+  let startingAspect;
+
+
+  /* =========================================================
+     BACKGROUND COLOR
+     ========================================================= */
+
+  function changecolor(element) {
+
+    bodyElement.style.backgroundColor =
+      element.value;
+
+  }
+
+
+  /* =========================================================
+     MESSAGE SYSTEM
+     ========================================================= */
+
+  let rollbackMessages = [];
+  let clearRollbackMessagesTimeoutId = -1;
+
+
+  function showRollbackMessage(message) {
+
+    rollbackMessages.push(message);
+
+    /*
+      Build once instead of repeatedly modifying the DOM.
+    */
+    messagesElement.textContent =
+      rollbackMessages.join("\n");
+
+    messageContainerElement.style.display =
+      "block";
+
+
+    clearTimeout(
+      clearRollbackMessagesTimeoutId
+    );
+
+    clearRollbackMessagesTimeoutId =
+      setTimeout(
+        clearRollbackMessages,
+        5000
+      );
+
+  }
+
+
+  function clearRollbackMessages() {
+
+    clearRollbackMessagesTimeoutId = -1;
+
+    rollbackMessages.length = 0;
+
+    messageContainerElement.style.display =
+      "none";
+
+  }
+
+
+  /* =========================================================
+     GAME OUTPUT
+     ========================================================= */
+
+  let loadprogress = 0;
+
+
+  const Module = {
+
+    preRun: [],
+
+    postRun: [],
+
+
+    /*
+      Keep normal console output cheap.
+
+      The old version appended every single message
+      directly to the textarea, which can become expensive.
+    */
+
+    print: (() => {
+
+      const element =
+        outputElement;
+
+      if (element) {
+        element.value = "";
+      }
+
+
+      return function(text) {
+
+        if (arguments.length > 1) {
+
+          text =
+            Array.prototype
+              .slice
+              .call(arguments)
+              .join(" ");
+
+        }
+
+
+        /*
+          Loading messages still update the status.
+        */
+
+        if (text === "Starting WAD") {
+          loadprogress++;
+        }
+
+
+        if (loadprogress === 1) {
+
+          Module.setStatus(text);
+
+        } else if (loadprogress >= 2) {
+
+          Module.setStatus("");
+
+        }
+
+
+        /*
+          Only write the huge console output if
+          the user has actually opened it.
+
+          This saves DOM work during normal gameplay.
+        */
+
+        if (
+          outputElement.style.display !==
+          "none"
+        ) {
+
+          outputElement.value +=
+            text + "\n";
+
+          outputElement.scrollTop =
+            outputElement.scrollHeight;
+
+        }
+
+
+        /*
+          GameMaker uses this message to indicate
+          the main loop has started.
+        */
+
+        if (
+          text === "Entering main loop."
+        ) {
+
+          loadprogress++;
+
+          ensureAspectRatio();
+
+        }
+
+      };
+
+    })(),
+
+
+    printErr: function(text) {
+
+      if (arguments.length > 1) {
+
+        text =
+          Array.prototype
+            .slice
+            .call(arguments)
+            .join(" ");
+
+      }
+
+      console.error(text);
+
+    },
+
+
+    canvas: canvasElement,
+
+
+    setStatus: function(text) {
+
+      if (!Module.setStatus.last) {
+
+        Module.setStatus.last = {
+          time: Date.now(),
+          text: ""
+        };
+
+      }
+
+
+      if (
+        text ===
+        Module.setStatus.last.text
+      ) {
+        return;
+      }
+
+
+      const match =
+        text.match(
+          /([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/
+        );
+
+
+      const now =
+        Date.now();
+
+
+      /*
+        Avoid updating the DOM dozens of times
+        per second during downloads.
+      */
+
+      if (
+        match &&
+        now - Module.setStatus.last.time < 50
+      ) {
+        return;
+      }
+
+
+      Module.setStatus.last.time =
+        now;
+
+      Module.setStatus.last.text =
+        text;
+
+
+      if (match) {
+
+        text = match[1];
+
+        progressElement.value =
+          parseInt(match[2], 10) * 100;
+
+        progressElement.max =
+          parseInt(match[4], 10) * 100;
+
+        progressElement.hidden =
+          false;
+
+        spinnerElement.hidden =
+          false;
+
+      } else {
+
+        progressElement.hidden =
+          true;
+
+
+        if (!text) {
+
+          spinnerElement.style.display =
+            "none";
+
+          loadingElement.style.display =
+            "none";
+
+          canvasElement.style.display =
+            "block";
+
+          canvasElement.classList.add(
+            "active"
+          );
+
+        }
+
+      }
+
+
+      statusElement.textContent =
+        text;
+
+    },
+
+
+    totalDependencies: 0,
+
+
+    monitorRunDependencies: function(left) {
+
+      this.totalDependencies =
+        Math.max(
+          this.totalDependencies,
+          left
+        );
+
+
+      if (left) {
+
+        Module.setStatus(
+          "Preparing... (" +
+          (
+            this.totalDependencies -
+            left
+          ) +
+          "/" +
+          this.totalDependencies +
+          ")"
+        );
+
+      } else {
+
+        Module.setStatus(
+          "All downloads complete."
+        );
+
+      }
+
+    }
+
+  };
+
+
+  Module.setStatus(
+    "Downloading..."
+  );
+
+
+  /* =========================================================
+     ERROR HANDLING
+     ========================================================= */
+
+  window.onerror = function(event) {
+
+    Module.setStatus(
+      "Exception thrown, see JavaScript console"
+    );
+
+    spinnerElement.style.display =
+      "none";
+
+    console.error(event);
+
+  };
+
+
+  /* =========================================================
+     URL ARGUMENTS
+     ========================================================= */
+
+  if (
+    typeof window === "object"
+  ) {
+
+    Module.arguments =
+      window.location.search
+        .substr(1)
+        .trim()
+        .split("&");
+
+
+    if (!Module.arguments[0]) {
+      Module.arguments = [];
+    }
+
+  }
+
+
+  /* =========================================================
+     CONSOLE TOGGLE
+     ========================================================= */
+
+  function toggleConsole() {
+
+    const isShown =
+      outputElement.style.display ===
+      "block";
+
+
+    if (isShown) {
+
+      outputElement.style.display =
+        "none";
+
+    } else {
+
+      outputElement.style.display =
+        "block";
+
+      outputElement.scrollIntoView({
+        block: "start"
+      });
+
+    }
+
+  }
+
+
+  /* =========================================================
+     GITHUB
+     ========================================================= */
+
+  function togglegithub() {
+
+    window.open(
+      "https://github.com/overbound/SonicTimeTwisted",
+      "_blank"
+    );
+
+  }
+
+
+  /* =========================================================
+     CLEAR CACHE
+     ========================================================= */
+
+  function toggleclear_site_cache() {
+
+    if (
+      !confirm(
+        "This Will Clear Site Cache\n" +
+        "This will ALSO Clear ALL SAVES\n\n" +
+        "ONLY do this if the Site has recently been Updated\n" +
+        "and if you are experiencing crashes relating to texture loading\n\n" +
+        "Continue?"
+      )
+    ) {
+      return;
+    }
+
+
+    (async () => {
+
+      try {
+
+        if (
+          "indexedDB" in window &&
+          typeof indexedDB.databases ===
+          "function"
+        ) {
+
+          const databases =
+            await indexedDB.databases();
+
+
+          for (
+            const database of databases
+          ) {
+
+            if (database.name) {
+              indexedDB.deleteDatabase(
+                database.name
+              );
+            }
+
+          }
+
+        }
+
+      } catch (error) {
+
+        console.error(
+          "Failed to clear IndexedDB:",
+          error
+        );
+
+      }
+
+      alert(
+        "All Site Cache Has Been Cleared!\n" +
+        "Please reload the Page"
+      );
+
+    })();
+
+  }
+
+
+  /* =========================================================
+     FPS COUNTER
+     ========================================================= */
+
+  let stopfps = 0;
+
+
+  function toggleFPS() {
+
+    if (stopfps !== 0) {
+      return;
+    }
+
+
+    stopfps = 1;
+
+
+    const script =
+      document.createElement("script");
+
+
+    script.onload = function() {
+
+      if (
+        typeof Stats ===
+        "undefined"
+      ) {
+        return;
+      }
+
+
+      const stats =
+        new Stats();
+
+      document.body.appendChild(
+        stats.dom
+      );
+
+
+      /*
+        One requestAnimationFrame loop,
+        only created when the user requests it.
+      */
+
+      function updateStats() {
+
+        stats.update();
+
+        requestAnimationFrame(
+          updateStats
+        );
+
+      }
+
+
+      requestAnimationFrame(
+        updateStats
+      );
+
+    };
+
+
+    script.src =
+      "https://mrdoob.github.io/stats.js/build/stats.min.js";
+
+
+    document.head.appendChild(
+      script
+    );
+
+  }
+
+
+  /* =========================================================
+     WEB PORTS
+     ========================================================= */
+
+  function togglewebports() {
+
+    window.open(
+      "https://burnedwebsite.vercel.app/projects/",
+      "_blank"
+    );
+
+  }
+
+
+  /* =========================================================
+     GAMEMAKER CALLBACKS
+     ========================================================= */
+
+  let g_pWadLoadCallback =
+    undefined;
+
+
+  function setWadLoadCallback(
+    _wadLoadCallback
+  ) {
+
+    g_pWadLoadCallback =
+      _wadLoadCallback;
+
+  }
+
+
+  let g_pAddAsyncMethod = -1;
+
+
+  function setAddAsyncMethod(
+    asyncMethod
+  ) {
+
+    g_pAddAsyncMethod =
+      asyncMethod;
+
+  }
+
+
+  let g_pJSExceptionHandler =
+    undefined;
+
+
+  function setJSExceptionHandler(
+    exceptionHandler
+  ) {
+
+    if (
+      typeof exceptionHandler ===
+      "function"
+    ) {
+
+      g_pJSExceptionHandler =
+        exceptionHandler;
+
+    }
+
+  }
+
+
+  function hasJSExceptionHandler() {
+
+    return (
+      g_pJSExceptionHandler !==
+      undefined &&
+      typeof g_pJSExceptionHandler ===
+      "function"
+    );
+
+  }
+
+
+  function doJSExceptionHandler(
+    exceptionJSON
+  ) {
+
+    if (
+      typeof g_pJSExceptionHandler ===
+      "function"
+    ) {
+
+      const exception =
+        JSON.parse(
+          exceptionJSON
+        );
+
+      g_pJSExceptionHandler(
+        exception
+      );
+
+    }
+
+  }
+
+
+  /* =========================================================
+     GAME FILE MANIFEST
+     ========================================================= */
+
+  function manifestFiles() {
+
+    return [
+      "runner.data",
+      "runner.js",
+      "runner.wasm",
+      "audio-worklet.js",
+      "game.unx"
+    ].join(";");
+
+  }
+
+
+  function manifestFilesMD5() {
+
+    return [
+      "64c52fe90575bb2e81703999947fd228",
+      "8205c033904e1ce761eff28ed921da38",
+      "b347cc99e3e72ed83507297e83c8a79e",
+      "e8f1e8db8cf996f8715a6f2164c2e44e",
+      "619c41bf1f2095125e1b3c43c1edd301"
+    ];
+
+  }
+
+
+  /* =========================================================
+     GAME WINDOW SIZE
+     ========================================================= */
+
+  function onFirstFrameRendered() {
+    /*
+      Intentionally empty.
+    */
+  }
+
+
+  function onGameSetWindowSize(
+    width,
+    height
+  ) {
+
+    if (
+      startingHeight === undefined &&
+      startingWidth === undefined
+    ) {
+
+      startingHeight =
+        height;
+
+      startingWidth =
+        width;
+
+      startingAspect =
+        width / height;
+
+    }
+
+  }
+
+
+  /* =========================================================
+     ADS
+     ========================================================= */
+
+  function triggerAd(
+    adId,
+    _callback_beforeAd,
+    _callback_afterAd,
+    _callback_adDismissed,
+    _callback_adViewed,
+    _callback_adbreakDone
+  ) {
+
+    const pRValueCopy =
+      triggerAdPrefix(
+        _callback_beforeAd,
+        _callback_afterAd,
+        _callback_adDismissed,
+        _callback_adViewed,
+        _callback_adbreakDone
+      );
+
+
+    const pCallbackBeforeAd =
+      pRValueCopy + (0 * 16);
+
+    const pCallbackAfterAd =
+      pRValueCopy + (1 * 16);
+
+    const pCallbackAdDismissed =
+      pRValueCopy + (2 * 16);
+
+    const pCallbackAdViewed =
+      pRValueCopy + (3 * 16);
+
+    const pCallbackAdBreakDone =
+      pRValueCopy + (4 * 16);
+
+
+    adBreak({
+
+      type: "reward",
+
+      name: adId,
+
+
+      beforeAd: () => {
+
+        doGMLCallback(
+          pCallbackBeforeAd,
+          { id: adId }
+        );
+
+      },
+
+
+      afterAd: () => {
+
+        doGMLCallback(
+          pCallbackAfterAd,
+          { id: adId }
+        );
+
+      },
+
+
+      beforeReward: showAdFn => {
+
+        showAdFn();
+
+      },
+
+
+      adDismissed: () => {
+
+        doGMLCallback(
+          pCallbackAdDismissed,
+          { id: adId }
+        );
+
+      },
+
+
+      adViewed: () => {
+
+        doGMLCallback(
+          pCallbackAdViewed,
+          { id: adId }
+        );
+
+      },
+
+
+      adBreakDone: placementInfo => {
+
+        doGMLCallback(
+          pCallbackAdBreakDone,
+          { id: adId }
+        );
+
+        triggerAdPostfix(
+          pRValueCopy
+        );
+
+      }
+
+    });
+
+  }
+
+
+  /* =========================================================
+     ASPECT RATIO
+     ========================================================= */
+
+  let resizeFramePending = false;
+
+
+  function ensureAspectRatio() {
+
+    if (
+      !canvasElement ||
+      !CHANGE_ASPECT_RATIO
+    ) {
+      return;
+    }
+
+
+    if (
+      startingHeight === undefined ||
+      startingWidth === undefined
+    ) {
+      return;
+    }
+
+
+    /*
+      Don't repeatedly modify the canvas size
+      unless the size actually changed.
+    */
+
+    const maxWidth =
+      window.innerWidth;
+
+    const maxHeight =
+      window.innerHeight;
+
+
+    const heightQuotient =
+      startingHeight /
+      maxHeight;
+
+    const widthQuotient =
+      startingWidth /
+      maxWidth;
+
+
+    let newWidth;
+    let newHeight;
+
+
+    if (
+      heightQuotient >
+      widthQuotient
+    ) {
+
+      newHeight =
+        maxHeight;
+
+      newWidth =
+        newHeight *
+        startingAspect;
+
+    } else {
+
+      newWidth =
+        maxWidth;
+
+      newHeight =
+        newWidth /
+        startingAspect;
+
+    }
+
+
+    /*
+      Only touch style if something changed.
+    */
+
+    const width =
+      `${newWidth}px`;
+
+    const height =
+      `${newHeight}px`;
+
+
+    if (
+      canvasElement.style.width !==
+      width
+    ) {
+
+      canvasElement.style.width =
+        width;
+
+    }
+
+
+    if (
+      canvasElement.style.height !==
+      height
+    ) {
+
+      canvasElement.style.height =
+        height;
+
+    }
+
+
+    canvasElement.classList.add(
+      "active"
+    );
+
+  }
+
+
+  function scheduleResize() {
+
+    if (resizeFramePending) {
+      return;
+    }
+
+
+    resizeFramePending = true;
+
+
+    requestAnimationFrame(() => {
+
+      resizeFramePending = false;
+
+      ensureAspectRatio();
+
+    });
+
+  }
+
+
+  /* =========================================================
+     PAUSE / RESUME
+     ========================================================= */
+
+  function pause() {
+
+    if (
+      !canvasElement.classList.contains(
+        "active"
+      )
+    ) {
+      return;
+    }
+
+
+    GM_pause();
+
+    pauseMenu.hidden =
+      false;
+
+    canvasElement.classList.add(
+      "paused"
+    );
+
+  }
+
+
+  function resume() {
+
+    GM_unpause();
+
+    pauseMenu.hidden =
+      true;
+
+    canvasElement.classList.remove(
+      "paused"
+    );
+
+    canvasElement.classList.add(
+      "unpaused"
+    );
+
+
+    enterFullscreenIfSupported();
+
+    lockOrientationIfSupported();
+
+  }
+
+
+  /* =========================================================
+     QUIT
+     ========================================================= */
+
+  function quitIfSupported() {
+
+    if (
+      window.oprt &&
+      window.oprt.closeTab
+    ) {
+
+      window.oprt.closeTab();
+
+    } else if (
+      window.chrome &&
+      window.chrome.runtime &&
+      window.chrome.runtime.sendMessage
+    ) {
+
+      window.chrome.runtime.sendMessage(
+        "mpojjmidmnpcpopbebmecmjdkdbgdeke",
+        {
+          command: "closeTab"
+        }
+      );
+
+    }
+
+  }
+
+
+  /* =========================================================
+     FULLSCREEN
+     ========================================================= */
+
+  function enterFullscreenIfSupported() {
+
+    if (
+      !window.oprt ||
+      !window.oprt.enterFullscreen
+    ) {
+      return;
+    }
+
+
+    window.oprt.enterFullscreen();
+
+
+    const viewStatus =
+      GM_get_view_status();
+
+
+    viewStatus.fullscreen =
+      true;
+
+
+    GM_set_view_status(
+      viewStatus
+    );
+
+  }
+
+
+  /* =========================================================
+     ORIENTATION
+     ========================================================= */
+
+  function lockOrientationIfSupported() {
+
+    if (
+      !window.oprt ||
+      !window.oprt.lockPortraitOrientation ||
+      !window.oprt.lockLandscapeOrientation
+    ) {
+      return;
+    }
+
+
+    const viewStatus =
+      GM_get_view_status();
+
+
+    if (
+      viewStatus.landscape === true &&
+      viewStatus.portrait === false
+    ) {
+
+      window.oprt.lockLandscapeOrientation();
+
+    } else if (
+      viewStatus.landscape === false &&
+      viewStatus.portrait === true
+    ) {
+
+      window.oprt.lockPortraitOrientation();
+
+    }
+
+  }
+
+
+  /* =========================================================
+     RESIZE OBSERVER
+     ========================================================= */
+
+  const resizeObserver =
+    new ResizeObserver(
+      scheduleResize
+    );
+
+
+  resizeObserver.observe(
+    document.body
+  );
+
+
+  /*
+    Also catch browser rotation/window resizing.
+  */
+
+  window.addEventListener(
+    "resize",
+    scheduleResize,
+    {
+      passive: true
+    }
+  );
+
+
+  /* =========================================================
+     MOBILE
+     ========================================================= */
+
+  if (
+    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    window.matchMedia("(pointer: coarse)").matches
+  ) {
+
+    bodyElement.classList.add(
+      "scrollingDisabled"
+    );
+
+    /*
+      Removed the old animated canvas resize.
+      Animated resizing wastes rendering work.
+    */
+
+    outputContainerElement.hidden =
+      true;
+
+  }
+
+
+  /* =========================================================
+     VISIBILITY / TAB PAUSING
+     ========================================================= */
+
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+
+      if (
+        document.visibilityState !==
+        "visible"
+      ) {
+
+        pause();
+
+      }
+
+    },
+    {
+      passive: true
+    }
+  );
+
+
+  /* =========================================================
+     WINDOW LOAD
+     ========================================================= */
+
+  window.addEventListener(
+    "load",
+    () => {
+
+      if (
+        (
+          !window.oprt ||
+          !window.oprt.enterFullscreen
+        ) &&
+        (
+          !window.chrome ||
+          !window.chrome.runtime ||
+          !window.chrome.runtime.sendMessage
+        )
+      ) {
+
+        quitButton.hidden =
+          true;
+
+      }
+
+    },
+    {
+      once: true
+    }
+  );
+
+
+  /* =========================================================
+     WAD CALLBACK
+     ========================================================= */
+
+  setWadLoadCallback(() => {
+
+    enterFullscreenIfSupported();
+
+    lockOrientationIfSupported();
+
+  });
+
+  </script>
+
+
+  <!--
+    runner.js is intentionally loaded LAST.
+
+    The game.unx fetch/XHR hooks above must exist before
+    GameMaker starts requesting game.unx.
+  -->
+
+  <script
+    defer
+    src="runner.js">
+  </script>
+
+</body>
+</html>
