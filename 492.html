@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@main/ut-last-breath/">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Last Breath</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      background: #000;
+      color: #fff;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    canvas {
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="c2canvasdiv">
+    <canvas id="c2canvas" width="640" height="480"></canvas>
+  </div>
+
+  <script src="jquery-3.4.1.min.js"></script>
+  <script src="c2runtime.js"></script>
+  <script>
+    jQuery(function () {
+      cr_createRuntime("c2canvas");
+    });
+
+    document.addEventListener("visibilitychange", function () {
+      cr_setSuspended(document.hidden);
+    });
+
+    window.C2_RegisterSW = function () {
+      if (!navigator.serviceWorker) return;
+
+      navigator.serviceWorker.register("sw.js", { scope: "./" })
+        .catch(function (error) {
+          console.warn("Service worker registration failed:", error);
+        });
+    };
+  </script>
+</body>
+</html>
