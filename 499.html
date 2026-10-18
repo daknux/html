@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Baldi Basic Creepy Run</title>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    #unity-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    #unity-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: #000;
+    }
+
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(320px, 85vw);
+      text-align: center;
+    }
+
+    #loading-title {
+      margin-bottom: 36px;
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: 5px;
+    }
+
+    #loading-text {
+      margin-bottom: 16px;
+      color: #aaa;
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    #unity-progress-bar-empty {
+      width: 100%;
+      height: 4px;
+      overflow: hidden;
+      background: #292929;
+      border-radius: 4px;
+    }
+
+    #loading-bar {
+      width: 0;
+      height: 100%;
+      background: #fff;
+      transition: width 0.2s ease;
+    }
+
+    #loading-footer {
+      margin-top: 18px;
+      color: #555;
+      font-size: 10px;
+      letter-spacing: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div id="unity-container">
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+
+    <div id="loading">
+      <div id="loading-title">Baldi Basic Creepy Run</div>
+      <div id="loading-text">Initializing...</div>
+
+      <div id="unity-progress-bar-empty">
+        <div id="loading-bar"></div>
+      </div>
+
+      <div id="loading-footer">PLEASE WAIT</div>
+    </div>
+  </div>
+
+  <script>
+    const baseUrl = "https://cdn.jsdelivr.net/gh/matheveryday25/math@main/baldicreepyrun";
+    const wasmName = "web.wasm";
+    const wasmChunks = 6;
+
+    const assets = [
+      { name: "web.data", url: `${baseUrl}/Build/web.data` },
+      { name: "web.framework.js", url: `${baseUrl}/Build/web.framework.js` },
+      { name: "web.loader.js", url: `${baseUrl}/Build/web.loader.js` }
+    ];
+
+    let loadedCount = 0;
+    const totalAssets = assets.length + wasmChunks;
+
+    const canvas = document.querySelector("#unity-canvas");
+    const loading = document.querySelector("#loading");
+    const loadingText = document.querySelector("#loading-text");
+    const loadingBar = document.querySelector("#loading-bar");
+    const loadingFooter = document.querySelector("#loading-footer");
+
+    async function fetchAsset(url) {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Failed to load ${url}`);
+      }
+
+      return response.arrayBuffer();
+    }
+
+    async function fetchWasmChunks() {
+      const chunks = [];
+
+      for (let i = 0; i < wasmChunks; i++) {
+        const chunkIndex = String(i).padStart(2, "0");
+        const url = `${baseUrl}/Build/${wasmName}${chunkIndex}`;
+
+        chunks.push(await fetchAsset(url));
+        updateLoading();
+      }
+
+      const totalSize = chunks.reduce(
+        (sum, chunk) => sum + chunk.byteLength, 0
+      );
+
+      const wasmData = new Uint8Array(totalSize);
+      let offset = 0;
+
+      for (const chunk of chunks) {
+        wasmData.set(new Uint8Array(chunk), offset);
+        offset += chunk.byteLength;
+      }
+
+      return wasmData;
+    }
+
+    async function loadAssets() {
+      await Promise.all(assets.map(async asset => {
+        asset.data = await fetchAsset(asset.url);
+        updateLoading();
+      }));
+    }
+
+    function updateLoading() {
+      loadedCount++;
+
+      const percent = Math.floor(loadedCount / totalAssets * 100);
+
+      loadingText.textContent = `Loading assets · ${percent}%`;
+      loadingBar.style.width = percent + "%";
+    }
+
+    async function initUnity(wasmData) {
+      const config = {
+        dataUrl: URL.createObjectURL(
+          new Blob([assets.find(a => a.name === "web.data").data])
+        ),
+        frameworkUrl: URL.createObjectURL(
+          new Blob([assets.find(a => a.name === "web.framework.js").data])
+        ),
+        codeUrl: URL.createObjectURL(
+          new Blob([wasmData], { type: "application/wasm" })
+        ),
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "BaldyBaldsTheUniverse",
+        productName: "Baldi Basic Creepy Run",
+        productVersion: "1.0"
+      };
+
+      const loaderScript = document.createElement("script");
+      loaderScript.src = assets.find(a => a.name === "web.loader.js").url;
+
+      loaderScript.onerror = () => {
+        throw new Error("Failed to load the Unity loader.");
+      };
+
+      loaderScript.onload = async () => {
+        try {
+          loadingText.textContent = "Starting game...";
+          loadingFooter.textContent = "ALMOST READY";
+
+          await createUnityInstance(canvas, config, progress => {
+            const percent = Math.floor(progress * 100);
+
+            loadingText.textContent = `Starting game · ${percent}%`;
+            loadingBar.style.width = percent + "%";
+          });
+
+          loading.remove();
+        } catch (error) {
+          showError(error);
+        }
+      };
+
+      document.body.appendChild(loaderScript);
+    }
+
+    function showError(error) {
+      loadingText.textContent = "LOAD FAILED";
+      loadingText.style.color = "#ff5555";
+      loadingFooter.textContent = "PLEASE REFRESH AND TRY AGAIN";
+      console.error(error);
+    }
+
+    async function start() {
+      try {
+        const [, wasmData] = await Promise.all([
+          loadAssets(),
+          fetchWasmChunks()
+        ]);
+
+        await initUnity(wasmData);
+      } catch (error) {
+        showError(error);
+      }
+    }
+
+    start();
+  </script>
+</body>
+</html>
