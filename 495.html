@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>-3</title>
+  <base href="https://cdn.jsdelivr.net/gh/matheveryday25/math@latest/minus3/">
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    #unity-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #unity-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    #loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 22px;
+      padding: 24px;
+      background: #000;
+    }
+
+    #loading-title {
+      color: #fff;
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: 5px;
+    }
+
+    #loading-text {
+      color: #aaa;
+      font-size: 13px;
+      letter-spacing: 1px;
+      text-align: center;
+    }
+
+    #unity-progress-bar-empty {
+      width: min(320px, 80vw);
+      height: 5px;
+      overflow: hidden;
+      background: #292929;
+      border-radius: 10px;
+    }
+
+    #unity-progress-bar-full {
+      width: 0%;
+      height: 100%;
+      background: #fff;
+      border-radius: inherit;
+      transition: width 0.15s linear;
+    }
+
+    #loading-footer {
+      color: #555;
+      font-size: 11px;
+      letter-spacing: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading-overlay">
+    <div id="loading-title">-3</div>
+
+    <div id="unity-progress-bar-empty">
+      <div id="unity-progress-bar-full"></div>
+    </div>
+
+    <div id="loading-text">INITIALIZING · 0%</div>
+    <div id="loading-footer">PLEASE WAIT</div>
+  </div>
+
+  <div id="unity-container">
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+  </div>
+
+  <script>
+    const loadingOverlay = document.querySelector("#loading-overlay");
+    const loadingText = document.querySelector("#loading-text");
+    const progressBarFull = document.querySelector("#unity-progress-bar-full");
+
+    let loadedBytes = 0;
+    const totalBytes = 111.21;
+
+    async function fetchWithProgress(url) {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Failed to load ${url}: ${response.status}`);
+      }
+
+      if (!response.body) {
+        const buffer = await response.arrayBuffer();
+        loadedBytes += buffer.byteLength;
+        updateLoadingText();
+        return buffer;
+      }
+
+      const reader = response.body.getReader();
+      const chunks = [];
+      let received = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        received += value.length;
+        loadedBytes += value.length;
+        chunks.push(value);
+        updateLoadingText();
+      }
+
+      const fullBuffer = new Uint8Array(received);
+      let offset = 0;
+
+      for (const chunk of chunks) {
+        fullBuffer.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      return fullBuffer.buffer;
+    }
+
+    function updateLoadingText() {
+      const loadedMB = (loadedBytes / (1024 * 1024)).toFixed(2);
+      loadingText.textContent =
+        `DOWNLOADING · ${loadedMB} MB / ${totalBytes.toFixed(2)} MB`;
+    }
+
+    async function mergeFiles(fileParts, cacheKey) {
+      const cache = await caches.open("-3-cache");
+      const cachedResponse = await cache.match(cacheKey);
+
+      if (cachedResponse) {
+        loadingText.textContent = "PREPARING GAME";
+        const blob = await cachedResponse.blob();
+        return URL.createObjectURL(blob);
+      }
+
+      const buffers = await Promise.all(
+        fileParts.map(part => fetchWithProgress(part))
+      );
+
+      const mergedBlob = new Blob(buffers);
+      await cache.put(cacheKey, new Response(mergedBlob));
+
+      return URL.createObjectURL(mergedBlob);
+    }
+
+    function getParts(file, start, end) {
+      const parts = [];
+
+      for (let i = start; i <= end; i++) {
+        parts.push(`${file}.part${i}`);
+      }
+
+      return parts;
+    }
+
+    async function startGame() {
+      try {
+        const [dataUrl, wasmUrl] = await Promise.all([
+          mergeFiles(getParts("Build/minus3bog.data", 1, 5), "minus3bog.data"),
+          mergeFiles(getParts("Build/minus3bog.wasm", 1, 2), "minus3bog.wasm")
+        ]);
+
+        const canvas = document.querySelector("#unity-canvas");
+
+        const config = {
+          dataUrl,
+          frameworkUrl: "Build/minus3bog.framework.js",
+          codeUrl: wasmUrl,
+          streamingAssetsUrl: "StreamingAssets",
+          companyName: "Mauzer2137",
+          productName: "-3",
+          productVersion: "3.-3"
+        };
+
+        const script = document.createElement("script");
+        script.src = "Build/minus3bog.loader.js";
+
+        script.onload = async () => {
+          try {
+            loadingText.textContent = "STARTING GAME";
+
+            await createUnityInstance(canvas, config, progress => {
+              progressBarFull.style.width = `${progress * 100}%`;
+              loadingText.textContent =
+                `STARTING GAME · ${Math.round(progress * 100)}%`;
+            });
+
+            loadingText.textContent = "READY";
+            loadingOverlay.remove();
+          } catch (error) {
+            loadingText.textContent = "FAILED TO START";
+            console.error(error);
+          }
+        };
+
+        script.onerror = () => {
+          loadingText.textContent = "FAILED TO LOAD GAME";
+        };
+
+        document.body.appendChild(script);
+      } catch (error) {
+        loadingText.textContent = "FAILED TO LOAD FILES";
+        console.error(error);
+      }
+    }
+
+    startGame();
+  </script>
+</body>
+</html>
