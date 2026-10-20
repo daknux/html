@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes">
+  <title>Slendrina in Baldi's Basics</title>
+  <style>
+    body {
+      padding: 0;
+      margin: 0;
+      background: #000;
+      overflow: hidden;
+    }
+    #unity-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #unity-canvas {
+      background: #000000;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #unity-loading-bar {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      display: none;
+    }
+    #unity-logo {
+      width: 154px;
+      height: 130px;
+      background: url('https://quizizz.com/_media/uploads/1ad95b6d-02df-46dd-9f3e-c682b591ca39-v2') no-repeat center;
+      background-size: contain;
+    }
+    #unity-progress-bar-empty {
+      width: 141px;
+      height: 18px;
+      margin-top: 10px;
+      margin-left: 6.5px;
+      background: url('https://quizizz.com/_media/uploads/07b8a9c2-eacb-4391-ac8d-300cfebfa7a9-v2') no-repeat center;
+    }
+    #unity-progress-bar-full {
+      width: 0%;
+      height: 18px;
+      margin-top: 10px;
+      background: url('https://quizizz.com/_media/uploads/de66a559-22b1-45cb-beed-ffb04130580f-v2') no-repeat center;
+    }
+    #unity-warning {
+      position: absolute;
+      left: 50%;
+      top: 5%;
+      transform: translate(-50%);
+      background: white;
+      padding: 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="unity-container">
+    <canvas id="unity-canvas" width="960" height="600" tabindex="-1"></canvas>
+    <div id="unity-loading-bar">
+      <div id="unity-logo"></div>
+      <div id="unity-progress-bar-empty">
+        <div id="unity-progress-bar-full"></div>
+      </div>
+    </div>
+    <div id="unity-warning"></div>
+  </div>
+
+  <script>
+  (async function () {
+    var LOADER_URL = "https://quizizz.com/_media/uploads/ddaa9ae1-17e2-4951-bf38-31b538bfb98c-v2";
+
+    var canvas = document.querySelector("#unity-canvas");
+    var loadingBar = document.querySelector("#unity-loading-bar");
+    var progressBarFull = document.querySelector("#unity-progress-bar-full");
+    var warningBanner = document.querySelector("#unity-warning");
+
+    function unityShowBanner(msg, type) {
+      function updateBannerVisibility() {
+        warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
+      }
+      var div = document.createElement('div');
+      div.innerHTML = msg;
+      warningBanner.appendChild(div);
+      if (type == 'error') div.style = 'background: red; padding: 10px;';
+      else {
+        if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
+        setTimeout(function () {
+          warningBanner.removeChild(div);
+          updateBannerVisibility();
+        }, 5000);
+      }
+      updateBannerVisibility();
+    }
+
+    var config = {
+      dataUrl: "https://quizizz.com/_media/uploads/b44a7844-2cd4-4ace-a946-51fc291ba7d8-v2",
+      frameworkUrl: "https://quizizz.com/_media/uploads/78bd05df-79ef-4f07-b348-ab646e2e1e82-v2",
+      codeUrl: "https://quizizz.com/_media/uploads/2cfc80c8-e62a-4339-b597-ee52f804ecb3-v2",
+      companyName: "Apple225",
+      productName: "Slendrina in Baldi's Basics",
+      productVersion: "1.2.1",
+      showBanner: unityShowBanner,
+    };
+
+    try {
+      var loaderRes = await fetch(LOADER_URL);
+      if (!loaderRes.ok) throw new Error('Loader fetch failed: ' + loaderRes.status);
+      var loaderText = await loaderRes.text();
+      if (loaderText.trimStart().startsWith('<')) throw new Error('Loader returned HTML instead of JS');
+
+      var blobUrl = URL.createObjectURL(new Blob([loaderText], { type: 'application/javascript' }));
+      var script = document.createElement('script');
+      script.src = blobUrl;
+      script.onload = function () {
+        loadingBar.style.display = "block";
+        createUnityInstance(canvas, config, (progress) => {
+          progressBarFull.style.width = 100 * progress + "%";
+        }).then(() => {
+          loadingBar.style.display = "none";
+        }).catch((message) => {
+          alert(message);
+        });
+      };
+      script.onerror = function () {
+        alert('Failed to load Unity loader script');
+      };
+      document.body.appendChild(script);
+    } catch (e) {
+      console.error(e);
+      alert('Error: ' + e.message);
+    }
+  })();
+  </script>
+</body>
+</html>
