@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en-us">
+   <head>
+      <meta charset="utf-8" />
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+      <meta
+         name="viewport"
+         content="width=device-width, initial-scale=1.0, user-scalable=no"
+      />
+
+      <title>Sans underatle</title>
+
+      <style>
+         html,
+         body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #231f20;
+         }
+
+         #unity-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+         }
+
+         #unity-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: block;
+            width: 100vw !important;
+            height: 100vh !important;
+            margin: 0;
+            padding: 0;
+            background: #231f20;
+         }
+
+         #unity-loading-bar {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            z-index: 10;
+         }
+
+         #unity-logo {
+            width: 154px;
+            height: 130px;
+            background: url("https://quizizz.com/_media/uploads/dd187432-786c-4098-99e9-523d8d4ee938-v2")
+               no-repeat center;
+            background-size: contain;
+         }
+
+         #unity-progress-bar-empty {
+            width: 141px;
+            height: 18px;
+            margin-top: 10px;
+            overflow: hidden;
+            background: url("https://quizizz.com/_media/uploads/ffb69d6c-db3e-41f0-94d1-c862bbfaec3a-v2")
+               no-repeat center;
+            background-size: 141px 18px;
+         }
+
+         #unity-progress-bar-full {
+            width: 0%;
+            height: 18px;
+            background: url("https://quizizz.com/_media/uploads/6f2ad7e2-6c70-475e-bb66-69f5225b1091-v2")
+               no-repeat left center;
+            background-size: 141px 18px;
+         }
+
+         #mouse-lock-warning {
+            position: fixed;
+            left: 50%;
+            top: 20px;
+            bottom: auto;
+            transform: translateX(-50%);
+            z-index: 20;
+            padding: 12px 20px;
+            border-radius: 6px;
+            background: #ffeb3b;
+            color: #000000;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            font-weight: 500;
+            text-align: center;
+            white-space: nowrap;
+            pointer-events: none;
+            user-select: none;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+         }
+
+         #mouse-lock-warning.visible {
+            opacity: 1;
+            transform: translateX(-50%);
+         }
+
+         #mouse-lock-warning strong {
+            font-weight: 700;
+         }
+      </style>
+   </head>
+
+   <body>
+      <div id="unity-container">
+         <canvas id="unity-canvas"></canvas>
+
+         <div id="unity-loading-bar">
+            <div id="unity-logo"></div>
+
+            <div id="unity-progress-bar-empty">
+               <div id="unity-progress-bar-full"></div>
+            </div>
+         </div>
+      </div>
+
+      <div id="mouse-lock-warning">Press <strong>Z</strong> to lock mouse</div>
+
+      <script>
+         var buildUrl = "https://quizizz.com/_media/uploads/";
+
+         var loaderUrl = buildUrl + "73eb8d9d-6741-4065-81c5-6c4e011c9129-v2";
+
+         var config = {
+            dataUrl: buildUrl + "d207d22f-6f7a-4307-914c-cfc3650f0f3b-v2",
+
+            frameworkUrl: buildUrl + "00a07f00-4169-478a-90cf-bc86166a9824-v2",
+
+            codeUrl: buildUrl + "810e0384-c069-458b-aef1-22f97cfcafd0-v2",
+
+            streamingAssetsUrl: "StreamingAssets",
+
+            companyName: "DefaultCompany",
+            productName: "Sans underatle",
+            productVersion: "0.1",
+         };
+
+         var canvas = document.querySelector("#unity-canvas");
+         var loadingBar = document.querySelector("#unity-loading-bar");
+         var progressBarFull = document.querySelector(
+            "#unity-progress-bar-full",
+         );
+
+         var mouseLockWarning = document.querySelector("#mouse-lock-warning");
+
+         var warningTimer;
+
+         function resizeCanvas() {
+            canvas.style.width = window.innerWidth + "px";
+            canvas.style.height = window.innerHeight + "px";
+         }
+
+         function showWarning() {
+            clearTimeout(warningTimer);
+
+            mouseLockWarning.classList.add("visible");
+
+            warningTimer = setTimeout(function () {
+               mouseLockWarning.classList.remove("visible");
+            }, 5000);
+         }
+
+         function lockMouse() {
+            if (!document.pointerLockElement) {
+               if (canvas.requestPointerLock) {
+                  canvas.requestPointerLock();
+               }
+            }
+         }
+
+         function unlockMouse() {
+            if (document.pointerLockElement) {
+               document.exitPointerLock();
+            }
+         }
+
+         function toggleMouseLock() {
+            if (document.pointerLockElement) {
+               unlockMouse();
+            } else {
+               lockMouse();
+            }
+         }
+
+         resizeCanvas();
+
+         window.addEventListener("resize", resizeCanvas);
+
+         if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+            config.devicePixelRatio = 1;
+         }
+
+         document.addEventListener("keydown", function (event) {
+            if (event.key.toLowerCase() === "z") {
+               event.preventDefault();
+               toggleMouseLock();
+            }
+         });
+
+         loadingBar.style.display = "block";
+
+         var script = document.createElement("script");
+         script.src = loaderUrl;
+
+         script.onload = function () {
+            createUnityInstance(canvas, config, function (progress) {
+               progressBarFull.style.width = 100 * progress + "%";
+            })
+               .then(function () {
+                  loadingBar.style.display = "none";
+                  showWarning();
+               })
+               .catch(function (message) {
+                  console.error("Unity failed to load:", message);
+               });
+         };
+
+         script.onerror = function () {
+            console.error("Failed to load the Unity WebGL loader.");
+         };
+
+         document.body.appendChild(script);
+      </script>
+   </body>
+</html>
