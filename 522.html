@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>fnaf</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<meta name="generator" content="Scirra Construct"/>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    color: #fff;
+    font-family: sans-serif;
+  }
+  #loading-screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: #000;
+    z-index: 9999;
+    transition: opacity 0.4s ease;
+  }
+  #loading-screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 4px solid rgba(255,255,255,0.12);
+    border-left-color: #09f;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #progress-wrap {
+    margin-top: 22px;
+    width: 260px;
+    height: 8px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #progress-bar {
+    height: 100%;
+    width: 0%;
+    background: #09f;
+    transition: width 0.15s linear;
+  }
+  #status-text {
+    margin-top: 16px;
+    font-size: 14px;
+    opacity: 0.85;
+  }
+  #sub-text {
+    margin-top: 6px;
+    font-size: 12px;
+    opacity: 0.5;
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <div id="progress-wrap"><div id="progress-bar"></div></div>
+  <div id="status-text">Preparing...</div>
+  <div id="sub-text"></div>
+</div>
+
+<script>
+window.addEventListener("keydown", function(e) {
+  if (["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) {
+    e.preventDefault();
+  }
+}, false);
+</script>
+
+<script>
+(async function () {
+  const ZIP_URL = 'https://quizizz.com/_media/uploadedFiles/ec726c95-dc7f-4249-88d9-8bc4188d8ef2-v2';
+
+  const loadingScreen = document.getElementById('loading-screen');
+  const statusText = document.getElementById('status-text');
+  const subText = document.getElementById('sub-text');
+  const progressBar = document.getElementById('progress-bar');
+
+  function setProgress(f) {
+    progressBar.style.width = Math.max(0, Math.min(1, f)) * 100 + '%';
+  }
+  function fmtMB(b) {
+    return (b / (1024 * 1024)).toFixed(2);
+  }
+
+  const fileMap = new Map();
+
+  function cleanPath(u) {
+    let s = String(u);
+    if (s.startsWith('blob:')) s = s.substring(5);
+    if (s.startsWith('http://') || s.startsWith('https://')) {
+      try { s = new URL(s).pathname; } catch (e) {}
+    }
+    s = s.split('?')[0].split('#')[0];
+    s = s.replace(/^\.\//, '').replace(/^\//, '');
+    return s.toLowerCase();
+  }
+
+  function findFileBlob(target) {
+    if (!target || typeof target !== 'string') return null;
+    if (target.startsWith('data:')) return null;
+    const clean = cleanPath(target);
+    if (fileMap.has(clean)) return fileMap.get(clean);
+    const filename = clean.split('/').pop();
+    if (!filename) return null;
+    for (const [key, blob] of fileMap.entries()) {
+      if (key === filename || key.endsWith('/' + filename)) return blob;
+    }
+    return null;
+  }
+
+  function rewriteCssUrls(cssText) {
+    return cssText.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, function (m, q, url) {
+      if (url.startsWith('data:') || url.startsWith('blob:') || /^https?:\/\//i.test(url)) {
+        return m;
+      }
+      const blob = findFileBlob(url);
+      if (blob) {
+        return 'url("' + URL.createObjectURL(blob) + '")';
+      }
+      return m;
+    });
+  }
+
+  try {
+    statusText.textContent = 'Downloading game...';
+    setProgress(0);
+
+    const zipRes = await fetch(ZIP_URL);
+    if (!zipRes.ok) throw new Error('HTTP ' + zipRes.status);
+
+    const totalBytes = parseInt(zipRes.headers.get('Content-Length') || '0', 10);
+    const reader = zipRes.body.getReader();
+    const chunks = [];
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      if (totalBytes > 0) {
+        setProgress((received / totalBytes) * 0.5);
+        subText.textContent = fmtMB(received) + ' / ' + fmtMB(totalBytes) + ' MB';
+      } else {
+        subText.textContent = fmtMB(received) + ' MB';
+      }
+    }
+    const buf = new Uint8Array(received);
+    let off = 0;
+    for (const c of chunks) { buf.set(c, off); off += c.length; }
+
+    statusText.textContent = 'Extracting...';
+    setProgress(0.5);
+    subText.textContent = '';
+
+    const zip = await JSZip.loadAsync(buf.buffer);
+
+    const zipKeys = Object.keys(zip.files);
+    const dataJsonKey = zipKeys.find(k => k.endsWith('data.json'));
+    let rootPrefix = '';
+    if (dataJsonKey) {
+      rootPrefix = dataJsonKey.substring(0, dataJsonKey.indexOf('data.json'));
+    }
+
+    const allEntries = Object.entries(zip.files).filter(([, f]) => !f.dir);
+    const totalEntries = allEntries.length;
+    let processed = 0;
+
+    for (const [relativePath, file] of allEntries) {
+      let clean = relativePath;
+      if (rootPrefix && clean.startsWith(rootPrefix)) {
+        clean = clean.substring(rootPrefix.length);
+      }
+      clean = clean.replace(/^\//, '').toLowerCase();
+
+      let mime = 'application/octet-stream';
+      if (clean.endsWith('.js')) mime = 'application/javascript';
+      else if (clean.endsWith('.json')) mime = 'application/json';
+      else if (clean.endsWith('.css')) mime = 'text/css';
+      else if (clean.endsWith('.html')) mime = 'text/html';
+      else if (clean.endsWith('.png')) mime = 'image/png';
+      else if (clean.endsWith('.jpg') || clean.endsWith('.jpeg')) mime = 'image/jpeg';
+      else if (clean.endsWith('.webp')) mime = 'image/webp';
+      else if (clean.endsWith('.gif')) mime = 'image/gif';
+      else if (clean.endsWith('.svg')) mime = 'image/svg+xml';
+      else if (clean.endsWith('.webm')) mime = 'audio/webm';
+      else if (clean.endsWith('.mp3')) mime = 'audio/mpeg';
+      else if (clean.endsWith('.ogg')) mime = 'audio/ogg';
+      else if (clean.endsWith('.wav')) mime = 'audio/wav';
+      else if (clean.endsWith('.ttf')) mime = 'font/ttf';
+      else if (clean.endsWith('.woff')) mime = 'font/woff';
+      else if (clean.endsWith('.woff2')) mime = 'font/woff2';
+
+      const blob = await file.async('blob');
+      fileMap.set(clean, new Blob([blob], { type: mime }));
+
+      processed++;
+      setProgress(0.5 + (processed / totalEntries) * 0.35);
+      subText.textContent = processed + ' / ' + totalEntries + ' files';
+    }
+
+    for (const cssName of ['style.css', 'iosvievport.css']) {
+      const cssBlob = findFileBlob(cssName);
+      if (cssBlob) {
+        const cssText = await cssBlob.text();
+        const styleEl = document.createElement('style');
+        styleEl.textContent = rewriteCssUrls(cssText);
+        document.head.appendChild(styleEl);
+      }
+    }
+
+    statusText.textContent = 'Starting game...';
+    setProgress(0.9);
+
+    const VIRTUAL_PREFIX = '__c3__';
+    const jsBlobUrls = new Map();
+    const imports = {};
+
+    function resolveRelative(spec, fromPath) {
+      if (!spec.startsWith('.')) return null;
+      const fromDir = fromPath.includes('/') ? fromPath.substring(0, fromPath.lastIndexOf('/')) : '';
+      const parts = (fromDir + '/' + spec).split('/');
+      const out = [];
+      for (const p of parts) {
+        if (p === '' || p === '.') continue;
+        if (p === '..') { out.pop(); continue; }
+        out.push(p);
+      }
+      const joined = out.join('/').toLowerCase();
+      const candidates = [joined, joined + '.js'];
+      for (const c of candidates) {
+        if (fileMap.has(c) && (c.endsWith('.js') || c.endsWith('.mjs'))) return c;
+      }
+      const base = joined.split('/').pop();
+      for (const k of fileMap.keys()) {
+        if (!k.endsWith('.js') && !k.endsWith('.mjs')) continue;
+        if (k === base || k.endsWith('/' + base) || k.endsWith('/' + base + '.js')) return k;
+      }
+      return null;
+    }
+
+    const rewritten = new Map();
+    for (const [path, blob] of fileMap.entries()) {
+      if (!path.endsWith('.js') && !path.endsWith('.mjs')) continue;
+      let code = await blob.text();
+      code = code.replace(/(['"])(\.\.?\/[^'"]+)\1/g, (m, q, spec) => {
+        const r = resolveRelative(spec, path);
+        if (r) return q + VIRTUAL_PREFIX + '/' + r + q;
+        return m;
+      });
+      rewritten.set(path, code);
+    }
+
+    for (const [path, code] of rewritten.entries()) {
+      const url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+      jsBlobUrls.set(path, url);
+      imports[VIRTUAL_PREFIX + '/' + path] = url;
+      const base = path.split('/').pop();
+      imports[VIRTUAL_PREFIX + '/' + base] = url;
+      if (path.startsWith('scripts/')) {
+        imports[VIRTUAL_PREFIX + '/' + path.substring('scripts/'.length)] = url;
+      }
+    }
+
+    const fakeOrigin = `blob:${location.origin}/`;
+    for (const [path, url] of jsBlobUrls.entries()) {
+      imports[fakeOrigin + path] = url;
+      imports[fakeOrigin + path.split('/').pop()] = url;
+    }
+
+    for (const [path, blob] of fileMap.entries()) {
+      if (!path.endsWith('.json')) continue;
+      const url = URL.createObjectURL(blob);
+      imports[fakeOrigin + path] = url;
+      imports[fakeOrigin + path.split('/').pop()] = url;
+    }
+
+    const im = document.createElement('script');
+    im.type = 'importmap';
+    im.textContent = JSON.stringify({ imports });
+    document.head.insertBefore(im, document.head.firstChild);
+
+    const originalFetch = window.fetch;
+    window.fetch = async function (input, init) {
+      const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+      const blob = findFileBlob(urlStr);
+      if (blob) {
+        return new Response(blob, {
+          status: 200,
+          statusText: 'OK',
+          headers: {
+            'Content-Type': blob.type || 'application/octet-stream',
+            'Content-Length': blob.size.toString()
+          }
+        });
+      }
+      return originalFetch(input, init);
+    };
+
+    const originalXHR = window.XMLHttpRequest.prototype.open;
+    window.XMLHttpRequest.prototype.open = function (method, url, ...args) {
+      if (typeof url === 'string') {
+        const blob = findFileBlob(url);
+        if (blob) url = URL.createObjectURL(blob);
+      }
+      return originalXHR.call(this, method, url, ...args);
+    };
+
+    const NativeWorker = window.Worker;
+    window.Worker = function (url, options) {
+      let urlStr = (url && typeof url.href === 'string') ? url.href : String(url);
+      if (urlStr && !urlStr.startsWith('blob:')) {
+        const cleaned = cleanPath(urlStr);
+        let resolved = jsBlobUrls.get(cleaned);
+        if (!resolved) {
+          const base = cleaned.split('/').pop();
+          for (const [k, u] of jsBlobUrls.entries()) {
+            if (k === base || k.endsWith('/' + base)) { resolved = u; break; }
+          }
+        }
+        if (resolved) {
+          url = resolved;
+        } else {
+          const blob = findFileBlob(cleaned);
+          if (blob) url = URL.createObjectURL(new Blob([blob], { type: 'application/javascript' }));
+        }
+      }
+      return new NativeWorker(url, options);
+    };
+    window.Worker.prototype = NativeWorker.prototype;
+
+    function patchSrc(proto) {
+      const desc = Object.getOwnPropertyDescriptor(proto, 'src');
+      if (!desc) return;
+      Object.defineProperty(proto, 'src', {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return desc.get.call(this); },
+        set: function (val) {
+          if (typeof val === 'string' && !val.startsWith('data:')) {
+            const cleaned = cleanPath(val);
+            let resolved = jsBlobUrls.get(cleaned);
+            if (!resolved) {
+              const base = cleaned.split('/').pop();
+              for (const [k, u] of jsBlobUrls.entries()) {
+                if (k === base || k.endsWith('/' + base)) { resolved = u; break; }
+              }
+            }
+            if (resolved) {
+              val = resolved;
+            } else {
+              const blob = findFileBlob(cleaned);
+              if (blob) val = URL.createObjectURL(blob);
+            }
+          }
+          desc.set.call(this, val);
+        }
+      });
+    }
+    patchSrc(HTMLMediaElement.prototype);
+    patchSrc(HTMLSourceElement.prototype);
+    patchSrc(HTMLImageElement.prototype);
+    patchSrc(HTMLScriptElement.prototype);
+
+    const originalSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+      if (name && String(name).toLowerCase() === 'src' && typeof value === 'string' && !value.startsWith('data:')) {
+        const blob = findFileBlob(value);
+        if (blob) value = URL.createObjectURL(blob);
+      }
+      return originalSetAttribute.call(this, name, value);
+    };
+
+    window["C3_IsSupported"] = true;
+
+    const injectModule = (path) => new Promise((resolve) => {
+      const url = jsBlobUrls.get(path);
+      if (!url) { resolve(); return; }
+      const s = document.createElement('script');
+      s.type = 'module';
+      s.src = url;
+      s.onload = () => resolve();
+      s.onerror = () => resolve();
+      document.head.appendChild(s);
+    });
+
+    await injectModule('scripts/offlineclient.js');
+    await injectModule('scripts/main.js');
+    await injectModule('scripts/register-sw.js');
+
+    setProgress(1);
+
+    const hide = () => {
+      if (document.querySelector('canvas')) {
+        loadingScreen.classList.add('hidden');
+        setTimeout(() => { loadingScreen.style.display = 'none'; }, 500);
+        return true;
+      }
+      return false;
+    };
+    if (!hide()) {
+      const obs = new MutationObserver(() => { if (hide()) obs.disconnect(); });
+      obs.observe(document.body, { childList: true, subtree: true });
+      setTimeout(() => {
+        obs.disconnect();
+        if (!document.querySelector('canvas')) {
+          statusText.textContent = 'Game failed to start (no canvas created)';
+        }
+      }, 15000);
+    }
+
+  } catch (err) {
+    console.error(err);
+    statusText.textContent = 'Error: ' + err.message;
+  }
+})();
+</script>
+</body>
+</html>
