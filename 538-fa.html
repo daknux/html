@@ -2,14 +2,12 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Doki Doki Literature Club Plus!</title>
+<title>Doki Doki Literature Club! Plus</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   html { background: #000; font-family: sans-serif; }
   body, html { margin: 0; padding: 0; overscroll-behavior: none; }
-  #canvas, #overlayDiv {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0 none;
-  }
+  #canvas, #overlayDiv { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0 none; }
   #canvas { background: #000; }
   .visible { visibility: visible; opacity: 1.0; transition: opacity .1s linear; }
   .hidden { visibility: hidden; opacity: 0; transition: visibility 0s .25s, opacity .25s linear; }
@@ -23,10 +21,7 @@
   #inputPrompt { color: #eee; font-size: 150%; margin-bottom: 1em; margin-top: 1em; }
   #inputText { width: 100%; font-size: 175%; padding: 5px; background: inherit; color: #eee; box-sizing: border-box; }
   #inputText:focus { color: #fff; }
-  #presplash {
-    position: absolute; top: 0; left: 0; display: block; margin: auto;
-    width: 100%; height: 100%; object-fit: contain;
-  }
+  #presplash { position: absolute; top: 0; left: 0; display: block; margin: auto; width: 100%; height: 100%; object-fit: contain; }
   #ContextContainer { position: absolute; left: 0; top: 0; color: white; z-index: 100; }
   #ContextContainer.shown { background: rgba(0,0,0,0.5); border-radius: 0 0 5px 0; }
   #ContextButton {
@@ -90,7 +85,7 @@
 
 <div id="loader">
   <div class="spinner"></div>
-  <div class="title">Doki Doki Literature Club Plus!</div>
+  <div class="title">Doki Doki Literature Club! Plus</div>
   <div class="status" id="loaderStatus">Preparing…</div>
   <div class="bar-wrap"><div class="bar" id="loaderBar"></div></div>
   <div class="mb" id="loaderMB"></div>
@@ -125,28 +120,59 @@
     gif: 'image/gif', svg: 'image/svg+xml', mp3: 'audio/mpeg', ogg: 'audio/ogg',
     wav: 'audio/wav', opus: 'audio/opus', webm: 'video/webm', mp4: 'video/mp4',
     ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
-    css: 'text/css', html: 'text/html', txt: 'text/plain', rpyc: 'application/octet-stream'
+    css: 'text/css', html: 'text/html', txt: 'text/plain', toml: 'text/plain',
+    rpyc: 'application/octet-stream', rpyb: 'application/octet-stream'
   };
   const mimeFor = (n) => {
     const d = n.lastIndexOf('.');
     return d < 0 ? 'application/octet-stream' : (MIME[n.substring(d + 1).toLowerCase()] || 'application/octet-stream');
   };
 
+  const IMG_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp'];
+  const AUD_EXTS = ['mp3', 'ogg', 'wav', 'opus'];
+  const VID_EXTS = ['mp4', 'webm', 'ogv', 'm4v'];
+
+  const FALLBACK_PNG_BYTES = Uint8Array.from(
+    atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='),
+    c => c.charCodeAt(0)
+  );
+
   const fileMap = new Map();
+  const placeholderMap = new Map();
   const innerZipCache = new Map();
   let innerZip = null;
+  let missingImageBlob = null;
+  let silenceBlob = null;
 
   function cleanPath(u) {
     if (!u) return '';
-    let s = String(u);
+    let s = String(u).trim();
     if (s.startsWith('blob:')) s = s.substring(5);
     if (s.includes('://')) {
       try { s = new URL(s).pathname; } catch (e) {}
     }
     s = s.split('?')[0].split('#')[0];
-    s = s.replace(/^\/+/, '');
-    s = s.replace(/^\.\//, '');
+    s = s.replace(/^\/+/, '').replace(/^(\.\.\/)+/, '').replace(/^\.\//, '');
     return s.toLowerCase();
+  }
+
+  function lookupMulti(map, clean) {
+    if (!clean) return null;
+    if (map.has(clean)) return map.get(clean);
+    if (clean.startsWith('game/') && map.has(clean.substring(5))) return map.get(clean.substring(5));
+    if (!clean.startsWith('game/') && map.has('game/' + clean)) return map.get('game/' + clean);
+    return null;
+  }
+
+  function findInMap(map, clean) {
+    const hit = lookupMulti(map, clean);
+    if (hit) return hit;
+    const name = clean.split('/').pop();
+    if (!name) return null;
+    for (const [k, b] of map.entries()) {
+      if (k === name || k.endsWith('/' + name)) return b;
+    }
+    return null;
   }
 
   function findFileBlob(target) {
@@ -154,22 +180,41 @@
     if (target.startsWith('data:')) return null;
     const clean = cleanPath(target);
     if (!clean) return null;
-    if (fileMap.has(clean)) return fileMap.get(clean);
-    const name = clean.split('/').pop();
-    if (!name) return null;
-    for (const [k, b] of fileMap.entries()) {
-      if (k === name || k.endsWith('/' + name)) return b;
+    return findInMap(fileMap, clean) || findInMap(placeholderMap, clean);
+  }
+
+  function fallbackForExtension(clean) {
+    const dot = clean.lastIndexOf('.');
+    if (dot < 0) return null;
+    const ext = clean.substring(dot + 1);
+    if (IMG_EXTS.includes(ext)) {
+      return missingImageBlob || new Blob([FALLBACK_PNG_BYTES], { type: 'image/png' });
+    }
+    if (AUD_EXTS.includes(ext)) {
+      return silenceBlob || new Blob([], { type: 'audio/ogg' });
+    }
+    if (VID_EXTS.includes(ext)) {
+      return new Blob([], { type: 'video/' + (ext === 'webm' ? 'webm' : ext === 'ogv' ? 'ogg' : 'mp4') });
     }
     return null;
   }
 
+  function resolveTarget(target) {
+    if (!target || typeof target !== 'string') return null;
+    if (target.startsWith('data:')) return null;
+    const clean = cleanPath(target);
+    if (!clean) return null;
+    return findInMap(fileMap, clean) || findInMap(placeholderMap, clean) || fallbackForExtension(clean);
+  }
+
   async function extractFromInnerZip(rawPath) {
     if (!innerZip) return null;
-    let clean = cleanPath(rawPath);
+    const clean = cleanPath(rawPath);
     if (!clean) return null;
-    const candidates = [clean];
+    const candidates = [];
     if (clean.startsWith('game/')) candidates.push(clean.substring(5));
-    if (!clean.startsWith('game/')) candidates.push('game/' + clean);
+    else candidates.push(clean, 'game/' + clean);
+    candidates.push('_placeholders/' + (clean.startsWith('game/') ? clean.substring(5) : clean));
     for (const cand of candidates) {
       if (innerZipCache.has(cand)) return innerZipCache.get(cand);
       const entry = innerZip.files[cand];
@@ -250,20 +295,64 @@
       const blob = await entry.async('blob');
       fileMap.set(path, blob.type ? blob : new Blob([blob], { type: mimeFor(path) }));
       done++;
-      setProgress(0.85 + (done / entries.length) * 0.1);
+      setProgress(0.85 + (done / entries.length) * 0.05);
       mbEl.textContent = done + ' / ' + entries.length + ' files';
     }
 
     const gzBlob = fileMap.get('game.zip');
     if (gzBlob) {
       setStatus('Indexing game archive…');
-      try {
-        innerZip = await JSZip.loadAsync(gzBlob);
-      } catch (e) {
-        console.warn('inner zip parse failed:', e);
+      try { innerZip = await JSZip.loadAsync(gzBlob); } catch (e) { console.error('innerZip load failed', e); }
+
+      if (innerZip) {
+        try {
+          const mi = innerZip.file('renpy/common/_missing_image.png');
+          if (mi) missingImageBlob = new Blob([await mi.async('blob')], { type: 'image/png' });
+        } catch (e) {}
+        try {
+          const sl = innerZip.file('renpy/common/_silence.ogg');
+          if (sl) silenceBlob = new Blob([await sl.async('blob')], { type: 'audio/ogg' });
+        } catch (e) {}
+
+        setStatus('Preloading placeholders…');
+        const phEntries = [];
+        for (const name of Object.keys(innerZip.files)) {
+          const f = innerZip.files[name];
+          if (f.dir) continue;
+          if (!name.startsWith('_placeholders/')) continue;
+          phEntries.push({ name, f });
+        }
+        let pidx = 0;
+        const CONCURRENCY = 16;
+        async function worker() {
+          while (pidx < phEntries.length) {
+            const i = pidx++;
+            const { name, f } = phEntries[i];
+            try {
+              const raw = await f.async('blob');
+              const stripped = name.substring('_placeholders/'.length).toLowerCase();
+              placeholderMap.set(stripped, new Blob([raw], { type: mimeFor(name) }));
+            } catch (e) {}
+            if (i % 100 === 0) {
+              setProgress(0.90 + (i / phEntries.length) * 0.10);
+              mbEl.textContent = i + ' / ' + phEntries.length + ' placeholders';
+            }
+          }
+        }
+        const workers = [];
+        for (let i = 0; i < CONCURRENCY; i++) workers.push(worker());
+        await Promise.all(workers);
       }
     }
     setProgress(1);
+
+    window.__ddlc = {
+      files: fileMap.size,
+      placeholders: placeholderMap.size,
+      innerZip: !!innerZip,
+      missingImage: !!missingImageBlob,
+      silence: !!silenceBlob
+    };
 
     window.gameZipURL = 'game.zip';
 
@@ -275,6 +364,7 @@
         if (!blob) {
           try { blob = await extractFromInnerZip(urlStr); } catch (e) {}
         }
+        if (!blob) blob = fallbackForExtension(cleanPath(urlStr));
         if (blob) return new Response(blob, {
           status: 200,
           headers: { 'Content-Type': blob.type || 'application/octet-stream', 'Content-Length': String(blob.size) }
@@ -285,8 +375,9 @@
 
     const nativeXhrOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function (method, url) {
-      if (typeof url === 'string' && !url.startsWith('blob:') && !url.startsWith('data:')) {
-        const blob = findFileBlob(url);
+      const urlStr = (url && typeof url === 'object' && 'href' in url) ? url.href : String(url || '');
+      if (urlStr && !urlStr.startsWith('blob:') && !urlStr.startsWith('data:')) {
+        const blob = resolveTarget(urlStr);
         if (blob) {
           const args = Array.prototype.slice.call(arguments);
           args[1] = URL.createObjectURL(blob);
