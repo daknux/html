@@ -8,65 +8,74 @@
 
 		    <title>Frickbears 3</title>
 
-	    <style>
+	<style>
       @-webkit-keyframes rotation {
-        from {
-          -webkit-transform: rotate(0deg);
-        }
-
-        to {
-          -webkit-transform: rotate(360deg);
-        }
+        from { -webkit-transform: rotate(0deg); }
+        to { -webkit-transform: rotate(360deg); }
       }
-
       @-moz-keyframes rotation {
-        from {
-          -moz-transform: rotate(0deg);
-        }
-
-        to {
-          -moz-transform: rotate(360deg);
-        }
+        from { -moz-transform: rotate(0deg); }
+        to { -moz-transform: rotate(360deg); }
       }
-
       @-o-keyframes rotation {
-        from {
-          -o-transform: rotate(0deg);
-        }
-
-        to {
-          -o-transform: rotate(360deg);
-        }
+        from { -o-transform: rotate(0deg); }
+        to { -o-transform: rotate(360deg); }
       }
-
       @keyframes rotation {
-        from {
-          transform: rotate(0deg);
-        }
-
-        to {
-          transform: rotate(360deg);
-        }
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
       }
 
       html {
         background: #060612;
+        overflow: hidden;              /* kill scrollbars */
+        height: 100%;
       }
 
       body {
         font-family: arial;
         margin: 0;
         padding: 0;
+        height: 100%;
         min-height: 100vh;
         min-height: -webkit-fill-available;
         min-height: fill-available;
-        min-height: 100svh; /* Otherwise contents can be covered by an address bar in Safari on iOS 15 */
-        min-width: 100vw;
-        background:radial-gradient( 56.63% 56.63% at 50% 43.37%, #1c1726 0%, #060612 100%);
+        min-height: 100svh;
+        width: 100vw;
+        background: radial-gradient(56.63% 56.63% at 50% 43.37%, #1c1726 0%, #060612 100%);
         display: flex;
         flex-direction: column;
-        overflow-x: hidden;
+        overflow: hidden;              /* no scrollbars */
         place-items: center;
+
+        /* kill click artifacts */
+        outline: none;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+        user-select: none;
+        -webkit-user-select: none;
+        caret-color: transparent;
+      }
+
+      /* Remove focus outlines from all interactive elements */
+      *:focus,
+      *:focus-visible,
+      *:active {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+
+      /* Remove tap highlight everywhere */
+      a, button, canvas, input, textarea, select, img, div {
+        -webkit-tap-highlight-color: transparent;
+        outline: none;
+      }
+
+      /* Allow text selection back inside the debug textarea only */
+      #output, textarea {
+        user-select: text;
+        -webkit-user-select: text;
+        caret-color: auto;
       }
 
       body.scrollingDisabled {
@@ -82,21 +91,22 @@
         text-align: center;
       }
 
-      /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
       canvas.emscripten {
         display: none;
         border: 0px none;
         background-color: black;
         position: relative;
         transition: opacity 5s ease-in;
-		-webkit-transition: opacity 5s ease-in;
+        -webkit-transition: opacity 5s ease-in;
         opacity: 0;
         filter: blur(0) grayscale(0);
         margin-top: auto;
         margin-bottom: auto;
-        image-rendering: optimizeQuality;           /* Older versions of FF          */
-        image-rendering: auto;                      /* Awesome future-browsers       */
-        -ms-interpolation-mode: bicubic;            /* IE                            */        
+        image-rendering: optimizeQuality;
+        image-rendering: auto;
+        -ms-interpolation-mode: bicubic;
+        outline: none !important;
+        -webkit-tap-highlight-color: transparent;
       }
 
       canvas.active {
@@ -120,34 +130,22 @@
       }
 
       @keyframes fadeIn {
-        0% {
-          opacity: 0;
-        }
-
-        100% {
-          opacity: 1;
-        }
+        0% { opacity: 0; }
+        100% { opacity: 1; }
       }
 
       @keyframes blur {
-        0% {
-          filter: blur(0) grayscale(0);
-        }
-
-        100% {
-          filter: blur(2px) grayscale(1);
-        }
+        0% { filter: blur(0) grayscale(0); }
+        100% { filter: blur(2px) grayscale(1); }
       }
 
       .spinner {
         height: 30px;
         width: 30px;
-
         -webkit-animation: rotation 0.8s linear infinite;
         -moz-animation: rotation 0.8s linear infinite;
         -o-animation: rotation 0.8s linear infinite;
         animation: rotation 0.8s linear infinite;
-
         border: 5px solid #bdff00;
         border-top: 5px solid #719900;
         border-radius: 100%;
@@ -157,13 +155,11 @@
         position: absolute;
         display: none;
         border: none;
-
         left: 0px;
         top: 0px;
         width: 400px;
         height: 100%;
         padding: 10px;
-
         font-family: monospace;
         font-size: 8;
         color: white;
@@ -186,13 +182,11 @@
         padding: 5px;
       }
 
-      /* Determines the style of the background of the progress bar */
       progress[value]::-webkit-progress-bar {
         background-color: #8492a6;
         height: 10px;
         border-radius: 15px;
       }
-      /* Determines the style of the completed part of the progress bar */
       progress[value]::-webkit-progress-value {
         background-image: -webkit-linear-gradient(left, #719900, #bdff00);
         height: 10px;
@@ -230,6 +224,8 @@
         background-color: black;
         color: #20c20e;
         font-family: "Lucida Console", Monaco, monospace;
+        outline: none;
+        -webkit-tap-highlight-color: transparent;
       }
 
       #output {
@@ -242,6 +238,7 @@
         border: none;
         padding: 0;
         width: 100%;
+        resize: none;
       }
 
       #message-container {
@@ -266,9 +263,9 @@
       }
 
       img.qrCode {
-         opacity: 1.0;
-         width: 50%;
-         height: 50%;
+        opacity: 1.0;
+        width: 50%;
+        height: 50%;
       }
 
       #pauseMenuContainer {
@@ -319,6 +316,8 @@
         margin: 5px 0;
         -webkit-user-select: none;
         user-select: none;
+        outline: none;
+        -webkit-tap-highlight-color: transparent;
       }
 
       #pauseMenu button#quitButton {
@@ -341,11 +340,9 @@
         background-color: white;
         text-anchor: middle;
       }
-
       .graph .labels.y-labels {
         text-anchor: end;
       }
-
       .graph {
         font-family: Averta, -apple-system, "Segoe UI", system-ui, sans-serif;
         font-feature-settings: "tnum", "lnum";
@@ -358,48 +355,19 @@
         background-color: transparent;
         fill: #ccc;
       }
-
       .graph .grid {
         stroke: #ccc;
         stroke-dasharray: 0;
         stroke-width: 1;
       }
-
-      .labels {
-        font-size: 4px;
-      }
-
-      .label-title {
-        font-weight: bold;
-        text-transform: uppercase;
-        font-size: 4px;
-      }
-
-      .peer0 {
-        fill: #fa1f4e;
-        stroke: #fa1f4e;
-      }
-      .peer1 {
-        fill: #a970ff;
-        stroke: #a970ff;
-      }
-      .peer2 {
-        fill: #4574ee;
-        stroke: #4574ee;
-      }
-      .peer3 {
-        fill: #c3ff6f;
-        stroke: #c3ff6f;
-      }
-
-      .peer {
-        stroke-width: 0;
-      }
-
-      .peer-frame-delay {
-        fill: none;
-        stroke-width: 1;
-      }
+      .labels { font-size: 4px; }
+      .label-title { font-weight: bold; text-transform: uppercase; font-size: 4px; }
+      .peer0 { fill: #fa1f4e; stroke: #fa1f4e; }
+      .peer1 { fill: #a970ff; stroke: #a970ff; }
+      .peer2 { fill: #4574ee; stroke: #4574ee; }
+      .peer3 { fill: #c3ff6f; stroke: #c3ff6f; }
+      .peer { stroke-width: 0; }
+      .peer-frame-delay { fill: none; stroke-width: 1; }
 
       .acceptable-rollback-button {
         border: none;
@@ -411,17 +379,11 @@
         background-color: black;
         color: #20c20e;
         font-family: "Lucida Console", Monaco, monospace;
+        outline: none;
+        -webkit-tap-highlight-color: transparent;
       }
-
-      .peer-acceptable-rollback {
-        fill: none;
-        stroke-width: 1;
-        opacity: 0.3;
-      }
-
-      .relay-rtt {
-        stroke-width: 2;
-      }
+      .peer-acceptable-rollback { fill: none; stroke-width: 1; opacity: 0.3; }
+      .relay-rtt { stroke-width: 2; }
     </style>
 
   </head>
