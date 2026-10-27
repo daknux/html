@@ -125,7 +125,7 @@
     gif: 'image/gif', svg: 'image/svg+xml', mp3: 'audio/mpeg', ogg: 'audio/ogg',
     wav: 'audio/wav', opus: 'audio/opus', webm: 'video/webm', mp4: 'video/mp4',
     ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
-    css: 'text/css', html: 'text/html', txt: 'text/plain'
+    css: 'text/css', html: 'text/html', txt: 'text/plain', rpyc: 'application/octet-stream'
   };
   const mimeFor = (n) => {
     const d = n.lastIndexOf('.');
@@ -133,14 +133,19 @@
   };
 
   const fileMap = new Map();
+  const innerZipCache = new Map();
+  let innerZip = null;
 
   function cleanPath(u) {
     if (!u) return '';
     let s = String(u);
     if (s.startsWith('blob:')) s = s.substring(5);
-    try { if (s.includes('://')) s = new URL(s).pathname; } catch (e) {}
+    if (s.includes('://')) {
+      try { s = new URL(s).pathname; } catch (e) {}
+    }
     s = s.split('?')[0].split('#')[0];
-    s = s.replace(/^\.\//, '').replace(/^\//, '');
+    s = s.replace(/^\/+/, '');
+    s = s.replace(/^\.\//, '');
     return s.toLowerCase();
   }
 
@@ -154,6 +159,43 @@
     if (!name) return null;
     for (const [k, b] of fileMap.entries()) {
       if (k === name || k.endsWith('/' + name)) return b;
+    }
+    return null;
+  }
+
+  async function extractFromInnerZip(rawPath) {
+    if (!innerZip) return null;
+    let clean = cleanPath(rawPath);
+    if (!clean) return null;
+    const candidates = [clean];
+    if (clean.startsWith('game/')) candidates.push(clean.substring(5));
+    if (!clean.startsWith('game/')) candidates.push('game/' + clean);
+    for (const cand of candidates) {
+      if (innerZipCache.has(cand)) return innerZipCache.get(cand);
+      const entry = innerZip.files[cand];
+      if (entry && !entry.dir) {
+        try {
+          const raw = await entry.async('blob');
+          const typed = new Blob([raw], { type: mimeFor(cand) });
+          innerZipCache.set(cand, typed);
+          return typed;
+        } catch (e) {}
+      }
+    }
+    const name = clean.split('/').pop();
+    if (name) {
+      for (const key of Object.keys(innerZip.files)) {
+        const f = innerZip.files[key];
+        if (f.dir) continue;
+        if (key === name || key.endsWith('/' + name)) {
+          try {
+            const raw = await f.async('blob');
+            const typed = new Blob([raw], { type: mimeFor(key) });
+            innerZipCache.set(key, typed);
+            return typed;
+          } catch (e) {}
+        }
+      }
     }
     return null;
   }
@@ -208,21 +250,35 @@
       const blob = await entry.async('blob');
       fileMap.set(path, blob.type ? blob : new Blob([blob], { type: mimeFor(path) }));
       done++;
-      setProgress(0.85 + (done / entries.length) * 0.15);
+      setProgress(0.85 + (done / entries.length) * 0.1);
       mbEl.textContent = done + ' / ' + entries.length + ' files';
     }
+
+    const gzBlob = fileMap.get('game.zip');
+    if (gzBlob) {
+      setStatus('Indexing game archive…');
+      try {
+        innerZip = await JSZip.loadAsync(gzBlob);
+      } catch (e) {
+        console.warn('inner zip parse failed:', e);
+      }
+    }
+    setProgress(1);
 
     window.gameZipURL = 'game.zip';
 
     const nativeFetch = window.fetch;
-    window.fetch = function (input, init) {
+    window.fetch = async function (input, init) {
       const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
       if (urlStr && !urlStr.startsWith('blob:') && !urlStr.startsWith('data:')) {
-        const blob = findFileBlob(urlStr);
-        if (blob) return Promise.resolve(new Response(blob, {
+        let blob = findFileBlob(urlStr);
+        if (!blob) {
+          try { blob = await extractFromInnerZip(urlStr); } catch (e) {}
+        }
+        if (blob) return new Response(blob, {
           status: 200,
           headers: { 'Content-Type': blob.type || 'application/octet-stream', 'Content-Length': String(blob.size) }
-        }));
+        });
       }
       return nativeFetch.apply(this, arguments);
     };
