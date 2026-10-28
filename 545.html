@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Granny Prison Escape</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100vw; height: 100vh;
+    overflow: hidden; background: #000; color: #fff;
+    font-family: system-ui, sans-serif;
+  }
+  #unity-canvas {
+    width: 100vw; height: 100vh; display: block;
+    position: absolute; left: 0; top: 0; background: #000;
+  }
+  #loader {
+    position: fixed; inset: 0; z-index: 9999;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #000; color: #fff; gap: 14px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    transition: opacity .4s ease;
+  }
+  #loader .spinner {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 4px solid rgba(255,255,255,0.12);
+    border-left-color: #d32f2f;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loader .title { font-size: 18px; font-weight: 600; letter-spacing: .5px; }
+  #loader .status { font-size: 13px; color: #999; min-height: 18px; text-align: center; padding: 0 20px; }
+  #loader .bar-wrap { width: min(420px, 80vw); height: 8px; background: #1a1a1a; border-radius: 4px; overflow: hidden; }
+  #loader .bar { height: 100%; width: 0%; background: #d32f2f; transition: width .15s ease; }
+  #loader .mb { font-size: 12px; color: #888; font-variant-numeric: tabular-nums; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<canvas id="unity-canvas" width="960" height="600" tabindex="-1"></canvas>
+
+<div id="loader">
+  <div class="spinner"></div>
+  <div class="title">Granny Prison Escape</div>
+  <div class="status" id="loaderStatus">Preparing…</div>
+  <div class="bar-wrap"><div class="bar" id="loaderBar"></div></div>
+  <div class="mb" id="loaderMB"></div>
+</div>
+
+<script>
+(async function () {
+  'use strict';
+
+  const ZIP_URL = 'https://quizizz.com/_media/uploadedFiles/f99a6322-810b-4aed-817c-a1d36939cd7f-v2';
+
+  const loaderEl = document.getElementById('loader');
+  const statusEl = document.getElementById('loaderStatus');
+  const barEl = document.getElementById('loaderBar');
+  const mbEl = document.getElementById('loaderMB');
+  const canvas = document.getElementById('unity-canvas');
+
+  const setStatus = (t) => statusEl.textContent = t;
+  const setProgress = (f) => barEl.style.width = Math.max(0, Math.min(100, f * 100)) + '%';
+  const fmtMB = (b) => (b / 1048576).toFixed(1) + ' MB';
+
+  function hideLoader() {
+    if (!loaderEl) return;
+    loaderEl.style.opacity = '0';
+    loaderEl.style.pointerEvents = 'none';
+    setTimeout(() => { if (loaderEl.parentNode) loaderEl.parentNode.removeChild(loaderEl); }, 500);
+  }
+
+  const MIME = {
+    js: 'application/javascript', mjs: 'application/javascript', json: 'application/json',
+    wasm: 'application/wasm', data: 'application/octet-stream', zip: 'application/zip',
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+    gif: 'image/gif', svg: 'image/svg+xml', ico: 'image/x-icon',
+    mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', opus: 'audio/opus',
+    webm: 'video/webm', mp4: 'video/mp4',
+    ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
+    css: 'text/css', html: 'text/html', txt: 'text/plain'
+  };
+  const mimeFor = (n) => {
+    const d = n.lastIndexOf('.');
+    return d < 0 ? 'application/octet-stream' : (MIME[n.substring(d + 1).toLowerCase()] || 'application/octet-stream');
+  };
+
+  const fileMap = new Map();
+  const blobUrlKeys = new Map();
+
+  function cleanPath(u) {
+    if (!u) return '';
+    let s = String(u);
+    if (s.startsWith('blob:')) s = s.substring(5);
+    if (s.includes('://')) { try { s = new URL(s).pathname; } catch (e) {} }
+    s = s.split('?')[0].split('#')[0];
+    s = s.replace(/^\/+/, '').replace(/^\.\//, '');
+    return s.toLowerCase();
+  }
+
+  function findFileBlob(target) {
+    if (!target || typeof target !== 'string') return null;
+    if (target.startsWith('data:')) return null;
+    const clean = cleanPath(target);
+    if (!clean) return null;
+    if (fileMap.has(clean)) return fileMap.get(clean);
+    const name = clean.split('/').pop();
+    if (!name) return null;
+    for (const [k, b] of fileMap.entries()) {
+      if (k === name || k.endsWith('/' + name)) return b;
+    }
+    return null;
+  }
+
+  function trackBlobUrl(key, blob) {
+    const url = URL.createObjectURL(blob);
+    blobUrlKeys.set(url, key);
+    return url;
+  }
+
+  function makeYandexStub() {
+    const dataStore = {};
+    const statsStore = {};
+    const player = {
+      getUniqueID: () => Promise.resolve('ripped-player'),
+      getName: () => Promise.resolve('Player'),
+      getPhoto: () => Promise.resolve({ photo: '' }),
+      getPhotos: () => Promise.resolve({}),
+      getMode: () => Promise.resolve('lite'),
+      getData: (keys) => {
+        if (!keys) return Promise.resolve({ data: Object.assign({}, dataStore), signature: '' });
+        const out = {};
+        for (const k of keys) if (k in dataStore) out[k] = dataStore[k];
+        return Promise.resolve({ data: out, signature: '' });
+      },
+      setData: (data) => { if (data) Object.assign(dataStore, data); return Promise.resolve(); },
+      getStats: () => Promise.resolve(Object.assign({}, statsStore)),
+      setStats: (stats) => { if (stats) Object.assign(statsStore, stats); return Promise.resolve(); },
+      incrementStats: (stats) => { if (stats) for (const k in stats) statsStore[k] = (statsStore[k] || 0) + stats[k]; return Promise.resolve(); },
+      isAvailable: () => Promise.resolve(true),
+      getSignature: () => Promise.resolve(''),
+    };
+    const loadingApi = { ready: () => {}, start: () => {}, gameplayStart: () => {}, gameplayStop: () => {} };
+    const adv = {
+      showFullscreenAdv: (o) => {
+        try { if (o && o.callbacks && o.callbacks.onOpen) o.callbacks.onOpen(); } catch (e) {}
+        try { if (o && o.callbacks && o.callbacks.onClose) o.callbacks.onClose(true); } catch (e) {}
+      },
+      showRewardedVideo: (o) => {
+        try { if (o && o.callbacks && o.callbacks.onOpen) o.callbacks.onOpen(); } catch (e) {}
+        try { if (o && o.callbacks && o.callbacks.onRewarded) o.callbacks.onRewarded(); } catch (e) {}
+        try { if (o && o.callbacks && o.callbacks.onClose) o.callbacks.onClose(); } catch (e) {}
+      },
+      getBannerAdvStatus: () => Promise.resolve({ stickyAdvIsShowing: false, reason: '' }),
+      showBannerAdv: () => Promise.resolve(),
+      hideBannerAdv: () => Promise.resolve(),
+    };
+    const i18n = { lang: 'en', tld: 'com', langFamily: 'en', t: (k, o) => (o && o.defaultValue) || k };
+    const environment = {
+      app: { id: 'ripped' },
+      browser: { lang: 'en', isMobile: false, userAgent: navigator.userAgent },
+      i18n,
+      payload: '',
+      clientFeatures: [],
+    };
+    const deviceInfo = {
+      type: 'desktop',
+      isMobile: () => false,
+      isTablet: () => false,
+      isDesktop: () => true,
+      isTV: () => false,
+    };
+    const ysdk = {
+      environment,
+      deviceInfo,
+      screen: { fullscreen: { status: 'off', request: () => Promise.resolve() }, exitFullscreen: () => Promise.resolve() },
+      feedback: { canReview: () => Promise.resolve({ canReview: false, reason: 'NO_AUTH' }), requestReview: () => Promise.resolve({ feedbackSent: false }) },
+      shortcut: { canShowPrompt: () => Promise.resolve({ canShow: false }), showPrompt: () => Promise.resolve({ outcome: 'rejected' }) },
+      storage: {
+        getItem: (k) => { try { return Promise.resolve(localStorage.getItem(k)); } catch (e) { return Promise.resolve(null); } },
+        setItem: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} return Promise.resolve(); },
+        removeItem: (k) => { try { localStorage.removeItem(k); } catch (e) {} return Promise.resolve(); },
+        clear: () => { try { localStorage.clear(); } catch (e) {} return Promise.resolve(); },
+      },
+      serverTime: () => Promise.resolve(Date.now()),
+      adv,
+      getPlayer: () => Promise.resolve(player),
+      auth: { openAuthDialog: () => Promise.resolve() },
+      features: {
+        LoadingAPI: loadingApi,
+        GameplayAPI: loadingApi,
+        GamesAPI: { getGameByGameId: () => Promise.resolve(null) },
+      },
+      isAvailableMethod: () => true,
+      getLeaderboards: () => Promise.resolve({
+        setLeaderboardScore: () => Promise.resolve(),
+        getLeaderboardEntries: () => Promise.resolve({ entries: [] }),
+      }),
+    };
+    window.YaGames = { init: () => Promise.resolve(ysdk), auth: { openAuthDialog: () => Promise.resolve() } };
+    window.ysdk = ysdk;
+    window.player = player;
+  }
+
+  async function extractEntry(entry, path) {
+    let blob = null;
+    try {
+      blob = await entry.async('blob');
+    } catch (e) {
+      console.warn(`[extract] ${path} via blob threw:`, e);
+    }
+    let blobSize = blob ? blob.size : 0;
+    let u8Size = 0;
+    if (blobSize < 1024) {
+      try {
+        const u8 = await entry.async('uint8array');
+        u8Size = u8.length;
+        if (u8Size > blobSize) {
+          blob = new Blob([u8], { type: mimeFor(path) });
+          blobSize = u8Size;
+        }
+      } catch (e) {
+        console.warn(`[extract] ${path} via uint8array threw:`, e);
+      }
+    }
+    return { blob, blobSize, u8Size };
+  }
+
+  try {
+    setStatus('Downloading game…');
+    const resp = await fetch(ZIP_URL);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+    const reader = resp.body.getReader();
+    const chunks = [];
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      if (total > 0) {
+        setProgress((received / total) * 0.6);
+        mbEl.textContent = fmtMB(received) + ' / ' + fmtMB(total);
+      } else {
+        mbEl.textContent = fmtMB(received);
+      }
+    }
+    const buf = new Uint8Array(received);
+    let off = 0;
+    for (const c of chunks) { buf.set(c, off); off += c.length; }
+    chunks.length = 0;
+
+    setStatus('Extracting…');
+    const zip = await JSZip.loadAsync(buf.buffer);
+    const names = Object.keys(zip.files);
+
+    let prefix = '';
+    const loaderKey = names.find(n => /Build\/Granny_Nightmare\.loader\.js$/i.test(n));
+    if (loaderKey) prefix = loaderKey.replace(/Build\/Granny_Nightmare\.loader\.js$/i, '');
+
+    const entries = [];
+    for (const name of names) {
+      const entry = zip.files[name];
+      if (entry.dir) continue;
+      let path = name;
+      if (prefix && path.startsWith(prefix)) path = path.substring(prefix.length);
+      path = path.replace(/^\/+/, '').toLowerCase();
+      if (path) entries.push({ path, entry });
+    }
+
+    let done = 0;
+    for (const { path, entry } of entries) {
+      const isData = /\.data$/i.test(path);
+      const { blob, blobSize, u8Size } = await extractEntry(entry, path);
+      if (isData || blobSize < 1024) {
+        const cd = entry._data || {};
+        console.log(`[extract] ${path}: blob=${blobSize} u8=${u8Size} cdUncompressed=${cd.uncompressedSize} cdCompressed=${cd.compressedSize}`);
+      }
+      if (!blob) continue;
+      fileMap.set(path, blob.type ? blob : new Blob([blob], { type: mimeFor(path) }));
+      done++;
+      setProgress(0.6 + (done / entries.length) * 0.1);
+      mbEl.textContent = done + ' / ' + entries.length + ' files';
+    }
+
+    const dataBlob = findFileBlob('Build/Granny_Nightmare.data');
+    if (!dataBlob) throw new Error('Granny_Nightmare.data missing from ZIP');
+    if (dataBlob.size < 1024) {
+      throw new Error(`Granny_Nightmare.data extracted to only ${dataBlob.size} bytes. ZIP entry is corrupted — re-rip the game and verify Granny_Nightmare.data is properly included.`);
+    }
+    console.log(`[loader] .data blob: ${dataBlob.size} bytes (${fmtMB(dataBlob.size)})`);
+
+    window.__nm = {
+      dataSize: dataBlob.size,
+      files: fileMap.size,
+      dataBlobRef: dataBlob
+    };
+
+    setStatus('Installing engine hooks…');
+
+    const nativeFetch = window.fetch;
+    window.fetch = async function (input, init) {
+      const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+
+      if (urlStr && urlStr.startsWith('blob:')) {
+        const key = blobUrlKeys.get(urlStr);
+        if (key) {
+          const blob = fileMap.get(key);
+          if (blob) {
+            return new Response(blob, {
+              status: 200,
+              headers: {
+                'Content-Type': blob.type || 'application/octet-stream',
+                'Content-Length': String(blob.size)
+              }
+            });
+          }
+        }
+        return nativeFetch.apply(this, arguments);
+      }
+
+      if (urlStr && !urlStr.startsWith('data:')) {
+        const blob = findFileBlob(urlStr);
+        if (blob) {
+          return new Response(blob, {
+            status: 200,
+            headers: { 'Content-Type': blob.type || 'application/octet-stream', 'Content-Length': String(blob.size) }
+          });
+        }
+      }
+      return nativeFetch.apply(this, arguments);
+    };
+
+    const nativeXhrOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (method, url) {
+      if (typeof url === 'string' && !url.startsWith('blob:') && !url.startsWith('data:')) {
+        const blob = findFileBlob(url);
+        if (blob) {
+          const args = Array.prototype.slice.call(arguments);
+          args[1] = URL.createObjectURL(blob);
+          return nativeXhrOpen.apply(this, args);
+        }
+      }
+      return nativeXhrOpen.apply(this, arguments);
+    };
+
+    const nativeSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+      if (name && String(name).toLowerCase() === 'src' && typeof value === 'string' && !value.startsWith('blob:') && !value.startsWith('data:')) {
+        const blob = findFileBlob(value);
+        if (blob) value = URL.createObjectURL(blob);
+      }
+      return nativeSetAttribute.call(this, name, value);
+    };
+
+    const NativeWorker = window.Worker;
+    window.Worker = function (url, options) {
+      let urlStr = (url && typeof url.href === 'string') ? url.href : String(url);
+      if (urlStr && !urlStr.startsWith('blob:')) {
+        const blob = findFileBlob(urlStr);
+        if (blob) url = URL.createObjectURL(new Blob([blob], { type: 'application/javascript' }));
+      }
+      return new NativeWorker(url, options);
+    };
+    window.Worker.prototype = NativeWorker.prototype;
+
+    makeYandexStub();
+
+    const loaderBlob = findFileBlob('Build/Granny_Nightmare.loader.js');
+    const frameworkBlob = findFileBlob('Build/Granny_Nightmare.framework.js');
+    const wasmBlob = findFileBlob('Build/Granny_Nightmare.wasm');
+
+    if (!loaderBlob) throw new Error('Granny_Nightmare.loader.js missing');
+    if (!frameworkBlob) throw new Error('Granny_Nightmare.framework.js missing');
+    if (!wasmBlob) throw new Error('Granny_Nightmare.wasm missing');
+
+    const loaderText = await loaderBlob.text();
+    const loaderUrl = trackBlobUrl('__loader__', new Blob([loaderText], { type: 'application/javascript' }));
+
+    setStatus('Loading engine…');
+
+    const dataUrl = trackBlobUrl('build/granny_nightmare.data', dataBlob);
+    const frameworkUrl = trackBlobUrl('build/granny_nightmare.framework.js', frameworkBlob);
+    const codeUrl = trackBlobUrl('build/granny_nightmare.wasm', wasmBlob);
+    const totalBuildBytes = dataBlob.size + frameworkBlob.size + wasmBlob.size;
+
+    setStatus('Starting game…');
+
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = loaderUrl;
+      script.onload = () => {
+        if (typeof createUnityInstance !== 'function') {
+          reject(new Error('createUnityInstance undefined'));
+          return;
+        }
+        const config = {
+          dataUrl,
+          frameworkUrl,
+          codeUrl,
+          companyName: 'DefaultCompany',
+          productName: 'Night Mare',
+          productVersion: '0.1',
+          showBanner: function (msg) { console.log('[unity]', msg); }
+        };
+        createUnityInstance(canvas, config, (progress) => {
+          setProgress(progress);
+          mbEl.textContent = fmtMB(progress * totalBuildBytes) + ' / ' + fmtMB(totalBuildBytes);
+        }).then((instance) => {
+          window.myGameInstance = instance;
+          resolve(instance);
+        }).catch(reject);
+      };
+      script.onerror = () => reject(new Error('Failed to inject loader'));
+      document.head.appendChild(script);
+    });
+
+    setProgress(1);
+    hideLoader();
+    setTimeout(hideLoader, 30000);
+
+  } catch (err) {
+    console.error(err);
+    setStatus('Error: ' + (err && err.message ? err.message : String(err)));
+  }
+})();
+</script>
+</body>
+</html>
