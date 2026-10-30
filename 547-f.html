@@ -56,7 +56,6 @@
 <script>
 (function () {
   'use strict';
-
   var GAMES = [
     { id:'begooded', title:'BeGooped',
       cover:'https://quizizz.com/_media/uploadedFiles/98cd08bd-835d-4d02-8734-1805ce5ce8a4-v2',
@@ -116,7 +115,6 @@
   function gameLoader() {
     'use strict';
     var CFG = window.__GAME_CFG__;
-
     (function () {
       var contexts = [];
       var OrigAC = window.AudioContext || window.webkitAudioContext;
@@ -220,7 +218,7 @@
       if (typeof s !== 'string') return s;
       if (s.indexOf('blob:') !== 0) return s;
       if (isRealBlobUrl(s)) return s;
-      return s.substring(5);
+      return s.substring(5); // strip bogus "blob:" prefix
     }
 
     function cleanPath(u) {
@@ -609,38 +607,31 @@
     });
   }
 
-  // =================================================================
-  // Parent UI
-  // =================================================================
   var menuEl = document.getElementById('menu');
   var stageEl = document.getElementById('stage');
   var frameHost = document.getElementById('frameHost');
   var backBtn = document.getElementById('backBtn');
   var currentIframe = null;
-  var currentUrl = null;
 
   function openGame(g) {
     closeGame();
     var html = buildIframeHtml(g);
-    var blob = new Blob([html], { type: 'text/html' });
-    var url = URL.createObjectURL(blob);
     var iframe = document.createElement('iframe');
     iframe.setAttribute('allow',
       'autoplay; encrypted-media; speaker-selection; fullscreen; gamepad; ' +
       'accelerometer; gyroscope; microphone; camera; clipboard-write; ' +
       'pointer-lock; vibrate; screen-wake-lock');
     iframe.setAttribute('allowfullscreen', '');
-    iframe.src = url;
+    iframe.srcdoc = html;
     iframe.addEventListener('load', function () { try { iframe.focus(); } catch (e) {} });
     frameHost.appendChild(iframe);
-    currentIframe = iframe; currentUrl = url;
+    currentIframe = iframe;
     menuEl.hidden = true; stageEl.hidden = false;
   }
 
   function closeGame() {
     if (currentIframe && currentIframe.parentNode) currentIframe.parentNode.removeChild(currentIframe);
-    if (currentUrl) { try { URL.revokeObjectURL(currentUrl); } catch (e) {} }
-    currentIframe = null; currentUrl = null;
+    currentIframe = null;
     stageEl.hidden = true; menuEl.hidden = false;
   }
 
