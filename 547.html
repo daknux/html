@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>i-Ready Games</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+  :root { --bg:#141414; --panel:#202020; --panel-border:#353535; --text:#f0f0f0; --muted:#a5a5a5; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; padding:0; width:100%; height:100%; }
+  body { background:var(--bg); color:var(--text); font-family:Arial,Helvetica,sans-serif; overflow:hidden; }
+  #menu { position:fixed; inset:0; overflow-y:auto; background:var(--bg); scrollbar-width:none; -ms-overflow-style:none; }
+  #menu::-webkit-scrollbar { display:none; }
+  .menu-inner { max-width:1080px; margin:0 auto; padding:36px 24px 28px; }
+  .menu-head { margin-bottom:26px; }
+  .menu-head h1 { margin:0 0 8px; font-size:30px; font-weight:700; letter-spacing:-.4px; color:var(--text); }
+  .menu-head p { margin:0; color:var(--muted); font-size:14px; }
+  #gameGrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:18px; }
+  .card { appearance:none; display:flex; flex-direction:column; padding:0; overflow:hidden; text-align:left; cursor:pointer; font:inherit; color:inherit; background:var(--panel); border:1px solid var(--panel-border); border-radius:8px; transition:border-color .15s ease; }
+  .card:hover { border-color:#777; }
+  .card:focus-visible { outline:2px solid #a0a0a0; outline-offset:2px; }
+  .thumb { display:block; width:100%; aspect-ratio:16/10; position:relative; background:#2a2a2a; }
+  .thumb img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
+  .card .name { padding:12px 13px; font-weight:600; font-size:14px; }
+  footer { margin:38px auto 0; padding-top:20px; border-top:1px solid var(--panel-border); color:var(--muted); font-size:12px; line-height:1.6; max-width:820px; text-align:center; }
+  footer p { margin:0 0 10px; }
+  footer .copy { font-size:11px; }
+  #stage { position:fixed; inset:0; background:#000; z-index:100; }
+  #frameHost { position:absolute; inset:0; }
+  #frameHost iframe { position:absolute; inset:0; width:100%; height:100%; border:0; display:block; background:#000; }
+  #backBtn { position:fixed; top:12px; left:12px; z-index:101; background:#252525; color:#fff; border:1px solid #555; border-radius:6px; padding:9px 14px; font:600 13px Arial,Helvetica,sans-serif; cursor:pointer; }
+  #backBtn:hover,#backBtn:focus-visible { background:#444; }
+  [hidden] { display:none!important; }
+  @media(max-width:540px) { .menu-inner { padding:26px 16px; } .menu-head h1 { font-size:26px; } #gameGrid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; } .card .name { font-size:13px; } }
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <div class="menu-inner">
+    <div class="menu-head"><h1>i-Ready Games</h1><p>Select a game to play</p></div>
+    <div id="gameGrid"></div>
+    <footer>
+      <p>All game assets, characters, and related media are the exclusive property of i-Ready, a brand of Curriculum Associates, LLC.</p>
+      <p>This is an unofficial, fan-made collection intended for educational and archival use only. This page is not affiliated with, endorsed by, or sponsored by Curriculum Associates.</p>
+      <p class="copy">© Curriculum Associates, LLC — All Rights Reserved</p>
+    </footer>
+  </div>
+</div>
+
+<div id="stage" hidden>
+  <div id="frameHost"></div>
+  <button id="backBtn" type="button">← Back</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var GAMES = [
+    { id:'begooded', title:'BeGooped',
+      cover:'https://quizizz.com/_media/uploadedFiles/98cd08bd-835d-4d02-8734-1805ce5ce8a4-v2',
+      zip:'https://quizizz.com/_media/uploadedFiles/3b35bb57-36ce-4bcc-a845-64e448ce9508-v2',
+      type:'phaser', strip:{ kind:'endsWith', value:'libs/phaser/phaser-ce-2.16.0.min.js' },
+      phaserPaths:['libs/phaser/phaser-ce-2.16.0.min.js','phaser-ce-2.16.0.min.js'],
+      containers:'center', bodyBg:'lightgrey', loaderBg:'#1a1a1a', accent:'#20cef7',
+      loaderVars:null, definesDisplayGame:true, fontFace:null, cssList:null,
+      imageFallback:false, stemFallback:false },
+    { id:'catstacker', title:'Cat Stacker',
+      cover:'https://quizizz.com/_media/uploadedFiles/dac0b341-8cb9-40a0-9e9b-879ccf136e16-v2',
+      zip:'https://quizizz.com/_media/uploadedFiles/a0a64275-8eed-4db7-b3d8-beca7ce35199-v2',
+      type:'phaser', strip:{ kind:'regex', value:'/instruction/', marker:'instruction/' },
+      phaserPaths:['phaser-ce-2.16.0.min.js'],
+      containers:'cat', bodyBg:'#1a1a1a', loaderBg:'#1a1a1a', accent:'#20cef7',
+      loaderVars:null, definesDisplayGame:true,
+      fontFace:{ path:'assets/fonts/baloo-regular-webfont.woff2', family:'balooregular' },
+      cssList:null, imageFallback:false, stemFallback:false },
+    { id:'pathspinners', title:'Path Spinners',
+      cover:'https://quizizz.com/_media/uploadedFiles/29e7bf42-04d5-4fcf-acd4-8005397ed682-v2',
+      zip:'https://quizizz.com/_media/uploadedFiles/19445743-9e97-4203-92c2-9bd14899cba7-v2',
+      type:'phaser', strip:{ kind:'endsWith', value:'libs/phaser/phaser-ce-2.16.0.min.js' },
+      phaserPaths:['libs/phaser/phaser-ce-2.16.0.min.js','phaser-ce-2.16.0.min.js'],
+      containers:'center', bodyBg:'lightgrey', loaderBg:'#1a1a1a', accent:'#20cef7',
+      loaderVars:null, definesDisplayGame:true, fontFace:null, cssList:null,
+      imageFallback:false, stemFallback:false },
+    { id:'galaxysprint', title:'Galaxy Sprint',
+      cover:'https://quizizz.com/_media/uploadedFiles/4365b799-266b-4d58-b2e5-cfe4437b8683-v2',
+      zip:'https://quizizz.com/_media/uploadedFiles/d1660a47-2cab-40da-9745-6612745ea5a1-v2',
+      type:'utils', strip:{ kind:'endsWith', value:'shared/lib/utils.js' },
+      phaserPaths:null, containers:null,
+      bodyBg:'#000', loaderBg:'#0a0a14', accent:'#8b5cf6',
+      loaderVars:null, definesDisplayGame:false, fontFace:null,
+      cssList:['shared/css/main.css','shared/css/righteous.css'],
+      imageFallback:true, stemFallback:true },
+    { id:'wizardpinball', title:'Wizard Pinball',
+      cover:'https://quizizz.com/_media/uploadedFiles/bf05d6cc-1568-4990-b654-446bea0d662b-v2',
+      zip:'https://quizizz.com/_media/uploadedFiles/16da8bc9-ebe5-4c6e-9629-5e6ea45188f7-v2',
+      type:'utils', strip:{ kind:'endsWith', value:'shared/lib/utils.js' },
+      phaserPaths:null, containers:null,
+      bodyBg:'#000', loaderBg:'#0a0a14', accent:'#8b5cf6',
+      loaderVars:null, definesDisplayGame:false, fontFace:null,
+      cssList:['shared/css/main.css','shared/css/knewave.css'],
+      imageFallback:true, stemFallback:true },
+    { id:'digsite', title:'Dig Site',
+      cover:'https://quizizz.com/_media/uploadedFiles/a865fae8-b4e3-41c5-81be-c4a57ad42447-v2',
+      zip:'https://quizizz.com/_media/uploadedFiles/503a2909-f5cc-4f07-ad02-1870df017ee2-v2',
+      type:'utils', strip:{ kind:'endsWith', value:'shared/lib/utils.js' },
+      phaserPaths:null, containers:null,
+      bodyBg:'#000', loaderBg:'#1a1206', accent:'#ffb43c',
+      loaderVars:{ '--muted':'#b09a7a','--mb':'#8a7a60','--bar-bg':'#2a1f10' },
+      definesDisplayGame:false, fontFace:null,
+      cssList:['shared/css/main.css','shared/css/luckiest-guy.css'],
+      imageFallback:true, stemFallback:true }
+  ];
+
+  function gameLoader() {
+    'use strict';
+    var CFG = window.__GAME_CFG__;
+
+    (function () {
+      var contexts = [];
+      var OrigAC = window.AudioContext || window.webkitAudioContext;
+      if (OrigAC) {
+        var Wrapped = function () {
+          var ctx = new OrigAC(...arguments);
+          contexts.push(ctx);
+          return ctx;
+        };
+        Wrapped.prototype = OrigAC.prototype;
+        if (window.AudioContext) window.AudioContext = Wrapped;
+        if (window.webkitAudioContext) window.webkitAudioContext = Wrapped;
+      }
+      function resumeAll() {
+        for (var i = 0; i < contexts.length; i++) {
+          var c = contexts[i];
+          if (c.state === 'suspended') { try { c.resume(); } catch (e) {} }
+        }
+      }
+      var evts = ['click','mousedown','touchstart','touchend','keydown','pointerdown'];
+      for (var i = 0; i < evts.length; i++) {
+        document.addEventListener(evts[i], resumeAll, { capture:true, passive:true });
+      }
+    })();
+
+    try {
+      var dd = Object.getOwnPropertyDescriptor(Document.prototype, 'domain');
+      if (dd && dd.set) {
+        Object.defineProperty(Document.prototype, 'domain', {
+          configurable: true,
+          get: function () { return dd.get.call(this); },
+          set: function (v) { try { dd.set.call(this, v); } catch (e) {} }
+        });
+      }
+    } catch (e) {}
+
+    var loaderEl = document.getElementById('loader');
+    var statusEl = document.getElementById('loaderStatus');
+    var barEl = document.getElementById('loaderBar');
+    var mbEl = document.getElementById('loaderMB');
+
+    var setStatus = function (t) { statusEl.textContent = t; };
+    var setProgress = function (f) { barEl.style.width = Math.max(0, Math.min(100, f * 100)) + '%'; };
+    var fmtMB = function (b) { return (b / 1048576).toFixed(1) + ' MB'; };
+
+    var loaderGone = false;
+    function hideLoader() {
+      if (loaderGone || !loaderEl) return;
+      loaderGone = true;
+      loaderEl.style.opacity = '0';
+      loaderEl.style.pointerEvents = 'none';
+      setTimeout(function () {
+        if (loaderEl.parentNode) loaderEl.parentNode.removeChild(loaderEl);
+      }, 500);
+    }
+
+    if (CFG.definesDisplayGame) {
+      window.init = function () {};
+      window.displayGame = function () {
+        try {
+          var f = document.getElementById('fullWindowHolder');
+          if (f) f.style.display = 'none';
+          var g = document.getElementById('gameContainer');
+          if (g) g.style.display = 'block';
+        } catch (e) {}
+        hideLoader();
+      };
+    }
+
+    var MIME = {
+      js:'application/javascript', json:'application/json', wasm:'application/wasm',
+      png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', webp:'image/webp',
+      gif:'image/gif', svg:'image/svg+xml', ico:'image/x-icon',
+      mp3:'audio/mpeg', m4a:'audio/mp4', ogg:'audio/ogg', wav:'audio/wav', opus:'audio/opus',
+      webm:'video/webm', mp4:'video/mp4',
+      ttf:'font/ttf', otf:'font/otf', woff:'font/woff', woff2:'font/woff2',
+      css:'text/css', html:'text/html', txt:'text/plain'
+    };
+    var mimeFor = function (n) {
+      var d = n.lastIndexOf('.');
+      return d < 0 ? 'application/octet-stream' : (MIME[n.substring(d + 1).toLowerCase()] || 'application/octet-stream');
+    };
+
+    var fileMap = new Map();
+    var blobByStem = new Map();
+    var urlCache = new Map();
+
+    function blobUrl(blob) {
+      var u = urlCache.get(blob);
+      if (!u) { u = URL.createObjectURL(blob); urlCache.set(blob, u); }
+      return u;
+    }
+
+    function isRealBlobUrl(s) {
+      if (typeof s !== 'string') return false;
+      if (s.indexOf('blob:') !== 0) return false;
+      var rest = s.substring(5);
+      return /^(https?:\/\/|null\/|file:\/\/)/i.test(rest);
+    }
+    function normalizeUrl(s) {
+      if (typeof s !== 'string') return s;
+      if (s.indexOf('blob:') !== 0) return s;
+      if (isRealBlobUrl(s)) return s;
+      return s.substring(5);
+    }
+
+    function cleanPath(u) {
+      if (!u) return '';
+      var s = String(u);
+      if (s.indexOf('blob:') === 0) s = s.substring(5);
+      if (s.indexOf('://') !== -1) { try { s = new URL(s).pathname; } catch (e) {} }
+      s = s.split('?')[0].split('#')[0];
+      while (s.indexOf('../') === 0) s = s.substring(3);
+      while (s.indexOf('./') === 0) s = s.substring(2);
+      s = s.replace(/^\/+/, '');
+      return s.toLowerCase();
+    }
+    function stemOf(n) { var i = n.lastIndexOf('.'); return i < 0 ? n : n.substring(0, i); }
+
+    function findFileBlob(target) {
+      if (!target || typeof target !== 'string') return null;
+      if (target.indexOf('data:') === 0) return null;
+      var clean = cleanPath(target);
+      if (!clean) return null;
+      if (fileMap.has(clean)) return fileMap.get(clean);
+      var name = clean.split('/').pop();
+      if (!name) return null;
+      for (var pair of fileMap) {
+        if (pair[0] === name || pair[0].endsWith('/' + name)) return pair[1];
+      }
+      if (CFG.stemFallback) {
+        var st = stemOf(name);
+        if (blobByStem.has(st)) return blobByStem.get(st);
+      }
+      return null;
+    }
+    function findHashedFile(prefix) {
+      var re = new RegExp('(^|/)' + prefix + '\\.[a-z0-9]+\\.js$', 'i');
+      for (var pair of fileMap) {
+        if (re.test(pair[0])) return pair[0];
+      }
+      return null;
+    }
+    function isImageTarget(t) {
+      return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(cleanPath(t));
+    }
+
+    var TRANSPARENT_PNG_URL = (function () {
+      var bin = atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+    })();
+
+    function loadScriptBlob(blob) {
+      return new Promise(function (resolve, reject) {
+        if (!blob) { reject(new Error('Missing script')); return; }
+        var typed = new Blob([blob], { type: 'application/javascript' });
+        var s = document.createElement('script');
+        s.src = blobUrl(typed);
+        s.async = false;
+        s.onload = function () { resolve(); };
+        s.onerror = function () { reject(new Error('Script load failed')); };
+        document.head.appendChild(s);
+      });
+    }
+
+    function forceCenterCanvas() {
+      var cs = document.querySelectorAll('canvas');
+      for (var i = 0; i < cs.length; i++) {
+        var c = cs[i];
+        if (c.offsetWidth < 100 || c.offsetHeight < 100) continue;
+        c.style.setProperty('position', 'fixed', 'important');
+        c.style.setProperty('top', '50%', 'important');
+        c.style.setProperty('left', '50%', 'important');
+        c.style.setProperty('right', 'auto', 'important');
+        c.style.setProperty('bottom', 'auto', 'important');
+        c.style.setProperty('transform', 'translate(-50%, -50%)', 'important');
+        c.style.setProperty('margin', '0', 'important');
+      }
+    }
+
+    (async function () {
+      try {
+        if (typeof JSZip === 'undefined') throw new Error('JSZip not loaded');
+
+        setStatus('Downloading game…');
+        var resp = await fetch(CFG.zip);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+        var reader = resp.body.getReader();
+        var chunks = [];
+        var received = 0;
+        while (true) {
+          var r = await reader.read();
+          if (r.done) break;
+          chunks.push(r.value);
+          received += r.value.length;
+          if (total > 0) {
+            setProgress((received / total) * 0.7);
+            mbEl.textContent = fmtMB(received) + ' / ' + fmtMB(total);
+          } else {
+            mbEl.textContent = fmtMB(received);
+          }
+        }
+        var buf = new Uint8Array(received);
+        var off = 0;
+        for (var ci = 0; ci < chunks.length; ci++) { buf.set(chunks[ci], off); off += chunks[ci].length; }
+        chunks.length = 0;
+
+        setStatus('Extracting…');
+        var zip = await JSZip.loadAsync(buf.buffer);
+        var names = Object.keys(zip.files);
+
+        var prefix = '';
+        var strip = CFG.strip;
+        if (strip && strip.kind === 'endsWith') {
+          var needle = strip.value.toLowerCase();
+          var probe = names.find(function (n) { return n.toLowerCase().endsWith(needle); });
+          if (probe) prefix = probe.slice(0, probe.toLowerCase().lastIndexOf(needle));
+        } else if (strip && strip.kind === 'regex') {
+          var re = new RegExp(strip.value, 'i');
+          var probe2 = names.find(function (n) { return re.test(n); });
+          if (probe2) {
+            var marker = strip.marker.toLowerCase();
+            var idx = probe2.toLowerCase().lastIndexOf(marker);
+            if (idx >= 0) prefix = probe2.slice(0, idx);
+          }
+        }
+
+        var entries = [];
+        for (var ni = 0; ni < names.length; ni++) {
+          var name = names[ni];
+          var entry = zip.files[name];
+          if (entry.dir) continue;
+          var path = name;
+          if (prefix && path.indexOf(prefix) === 0) path = path.substring(prefix.length);
+          path = path.replace(/^\/+/, '').toLowerCase();
+          if (path) entries.push({ path: path, entry: entry });
+        }
+
+        var done = 0;
+        for (var ei = 0; ei < entries.length; ei++) {
+          var e = entries[ei];
+          var blob = await e.entry.async('blob');
+          var typed = blob.type ? blob : new Blob([blob], { type: mimeFor(e.path) });
+          fileMap.set(e.path, typed);
+          if (CFG.stemFallback) {
+            var st = stemOf(e.path.split('/').pop());
+            if (!blobByStem.has(st)) blobByStem.set(st, typed);
+          }
+          done++;
+          setProgress(0.7 + (done / entries.length) * 0.2);
+          mbEl.textContent = done + ' / ' + entries.length + ' files';
+        }
+
+        setStatus('Installing hooks…');
+
+        var nativeFetch = window.fetch;
+        window.fetch = async function (input, init) {
+          var urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+          var norm = normalizeUrl(urlStr);
+          if (norm && norm.indexOf('data:') !== 0) {
+            var b = findFileBlob(norm);
+            if (b) return new Response(b, {
+              status: 200,
+              headers: { 'Content-Type': b.type || 'application/octet-stream', 'Content-Length': String(b.size) }
+            });
+          }
+          return nativeFetch.apply(this, arguments);
+        };
+
+        var nativeXhrOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (method, url) {
+          var norm = normalizeUrl(url);
+          if (typeof norm === 'string' && norm.indexOf('data:') !== 0) {
+            var b = findFileBlob(norm);
+            if (b) {
+              var args = Array.prototype.slice.call(arguments);
+              args[1] = blobUrl(b);
+              return nativeXhrOpen.apply(this, args);
+            }
+          }
+          return nativeXhrOpen.apply(this, arguments);
+        };
+
+        function patchSrc(proto, isImg) {
+          var desc = Object.getOwnPropertyDescriptor(proto, 'src');
+          if (!desc || !desc.set) return;
+          Object.defineProperty(proto, 'src', {
+            configurable: true,
+            enumerable: desc.enumerable,
+            get: function () { return desc.get.call(this); },
+            set: function (val) {
+              var norm = normalizeUrl(val);
+              if (typeof norm === 'string' && norm.indexOf('data:') !== 0) {
+                var b = findFileBlob(norm);
+                if (b) { desc.set.call(this, blobUrl(b)); return; }
+                if (isImg && CFG.imageFallback && isImageTarget(norm)) {
+                  desc.set.call(this, TRANSPARENT_PNG_URL);
+                  return;
+                }
+              }
+              desc.set.call(this, val);
+            }
+          });
+        }
+        patchSrc(HTMLImageElement.prototype, true);
+        patchSrc(HTMLMediaElement.prototype, false);
+        patchSrc(HTMLSourceElement.prototype, false);
+        patchSrc(HTMLScriptElement.prototype, false);
+
+        var nativeSetAttribute = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function (name, value) {
+          if (name && String(name).toLowerCase() === 'src' && typeof value === 'string') {
+            var norm = normalizeUrl(value);
+            if (norm.indexOf('data:') !== 0) {
+              var b = findFileBlob(norm);
+              if (b) value = blobUrl(b);
+              else if (this instanceof HTMLImageElement && CFG.imageFallback && isImageTarget(norm)) value = TRANSPARENT_PNG_URL;
+            }
+          }
+          return nativeSetAttribute.call(this, name, value);
+        };
+
+        var NativeWorker = window.Worker;
+        window.Worker = function (url, options) {
+          var urlStr = (url && typeof url.href === 'string') ? url.href : String(url);
+          var norm = normalizeUrl(urlStr);
+          if (norm && norm.indexOf('data:') !== 0) {
+            var b = findFileBlob(norm);
+            if (b) url = URL.createObjectURL(new Blob([b], { type: 'application/javascript' }));
+          }
+          return new NativeWorker(url, options);
+        };
+        window.Worker.prototype = NativeWorker.prototype;
+
+        if (CFG.type === 'utils') {
+          setStatus('Injecting CSS…');
+          var cssList = CFG.cssList || [];
+          for (var csi = 0; csi < cssList.length; csi++) {
+            var cssBlob = findFileBlob(cssList[csi]);
+            if (!cssBlob) continue;
+            var cssText = await cssBlob.text();
+            cssText = cssText.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, function (m, q, url) {
+              if (url.indexOf('data:') === 0 || url.indexOf('blob:') === 0 || /^https?:\/\//i.test(url)) return m;
+              var b = findFileBlob(url);
+              return b ? 'url("' + blobUrl(b) + '")' : m;
+            });
+            var styleEl = document.createElement('style');
+            styleEl.textContent = cssText;
+            document.head.appendChild(styleEl);
+          }
+          setStatus('Loading game…');
+          var utilsBlob = findFileBlob('shared/lib/utils.js');
+          if (!utilsBlob) throw new Error('utils.js missing');
+          await loadScriptBlob(utilsBlob);
+        } else {
+          if (CFG.fontFace) {
+            setStatus('Injecting font…');
+            var fontBlob = findFileBlob(CFG.fontFace.path);
+            if (fontBlob) {
+              var fontUrl = blobUrl(fontBlob);
+              var fStyle = document.createElement('style');
+              fStyle.textContent = "@font-face{font-family:'" + CFG.fontFace.family + "';src:url('" + fontUrl + "') format('woff2');font-weight:normal;font-style:normal;}";
+              document.head.appendChild(fStyle);
+              try { if (document.fonts && document.fonts.load) document.fonts.load('24pt ' + CFG.fontFace.family); } catch (e) {}
+            }
+          }
+          setStatus('Loading Phaser…');
+          var phaserBlob = null;
+          var phaserPaths = CFG.phaserPaths || [];
+          for (var pi = 0; pi < phaserPaths.length; pi++) {
+            phaserBlob = findFileBlob(phaserPaths[pi]);
+            if (phaserBlob) break;
+          }
+          if (!phaserBlob) throw new Error('phaser-ce-2.16.0.min.js missing');
+          await loadScriptBlob(phaserBlob);
+
+          setStatus('Loading bundles…');
+          var manifestPath = findHashedFile('manifest');
+          var vendorPath = findHashedFile('vendor');
+          var bundlePath = findHashedFile('bundle');
+          if (!manifestPath) throw new Error('manifest.*.js missing');
+          if (!vendorPath) throw new Error('vendor.*.js missing');
+          if (!bundlePath) throw new Error('bundle.*.js missing');
+          await loadScriptBlob(findFileBlob(manifestPath));
+          await loadScriptBlob(findFileBlob(vendorPath));
+          await loadScriptBlob(findFileBlob(bundlePath));
+        }
+
+        setProgress(1);
+        mbEl.textContent = '';
+
+        if (CFG.type === 'utils') {
+          var centerObs = new MutationObserver(forceCenterCanvas);
+          centerObs.observe(document.body, { childList: true, subtree: true, attributes: true });
+          forceCenterCanvas();
+          var intervals = [200, 500, 1000, 2000, 4000, 8000];
+          for (var ii = 0; ii < intervals.length; ii++) setTimeout(forceCenterCanvas, intervals[ii]);
+          window.addEventListener('resize', forceCenterCanvas);
+        }
+
+        var hideOnReady = function () {
+          var canvas = document.querySelector('canvas');
+          if (canvas && canvas.width > 0 && canvas.offsetWidth > 0) {
+            if (CFG.type === 'utils') forceCenterCanvas();
+            hideLoader();
+            return true;
+          }
+          return false;
+        };
+        if (!hideOnReady()) {
+          var obs = new MutationObserver(function () { if (hideOnReady()) obs.disconnect(); });
+          obs.observe(document.body, { childList: true, subtree: true, attributes: true });
+          setTimeout(function () { obs.disconnect(); hideLoader(); }, 15000);
+        }
+
+        try {
+          document.dispatchEvent(new Event('DOMContentLoaded', { bubbles: true }));
+          window.dispatchEvent(new Event('load', { bubbles: true }));
+        } catch (e) {}
+
+      } catch (err) {
+        console.error(err);
+        setStatus('Error: ' + (err && err.message ? err.message : String(err)));
+      }
+    })();
+  }
+
+  function buildIframeHtml(g) {
+    var pageCss;
+    if (g.containers === 'center') {
+      pageCss = '#gameContainer{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}#gameContainer canvas{display:block}';
+    } else if (g.containers === 'cat') {
+      pageCss = '#gameContainer{position:absolute;inset:0}#gameContainer canvas{display:block;margin:0 auto}';
+    } else {
+      pageCss =
+        'body{display:flex!important;align-items:center!important;justify-content:center!important}' +
+        'body canvas{position:relative!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;transform:none!important;margin:auto!important;display:block!important}';
+    }
+    var bodyDom = g.containers
+      ? '<div id="gameContainer"></div><div id="fullWindowHolder" style="display:none;"></div>'
+      : '';
+    var loaderVars = '';
+    if (g.loaderVars) {
+      Object.keys(g.loaderVars).forEach(function (k) { loaderVars += k + ':' + g.loaderVars[k] + ';'; });
+    }
+    var cfgJson = JSON.stringify(g).replace(/</g, '\\u003c');
+    var loaderScript = '(' + gameLoader.toString() + ')();';
+    var titleSafe = escapeHtml(g.title);
+
+    return '<!DOCTYPE html>\n' +
+      '<html>\n<head>\n' +
+      '<meta charset="utf-8">\n' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">\n' +
+      '<title>' + titleSafe + '</title>\n' +
+      '<style>\n' +
+      'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;background:' + g.bodyBg + ';color:#fff;font-family:sans-serif}\n' +
+      pageCss + '\n' +
+      '#loader{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:' + g.loaderBg + ';color:#e8e8f0;transition:opacity .4s ease;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--accent:' + g.accent + ';--bar-bg:#1a1a2a;--text:#e8e8f0;--muted:#99a;--mb:#778;' + loaderVars + '}\n' +
+      '#loader .spinner{width:48px;height:48px;border-radius:50%;border:4px solid rgba(255,255,255,.12);border-left-color:var(--accent);animation:spin 1s linear infinite}\n' +
+      '@keyframes spin{to{transform:rotate(360deg)}}\n' +
+      '#loader .title{font-size:18px;font-weight:600;letter-spacing:.5px;color:var(--text)}\n' +
+      '#loader .status{font-size:13px;color:var(--muted);min-height:18px;text-align:center;padding:0 20px}\n' +
+      '#loader .bar-wrap{width:min(420px,80vw);height:8px;background:var(--bar-bg);border-radius:4px;overflow:hidden}\n' +
+      '#loader .bar{height:100%;width:0%;background:var(--accent);transition:width .15s ease}\n' +
+      '#loader .mb{font-size:12px;color:var(--mb);font-variant-numeric:tabular-nums}\n' +
+      '</style>\n' +
+      '<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"><\/script>\n' +
+      '</head>\n<body>\n' +
+      bodyDom + '\n' +
+      '<div id="loader">\n' +
+      '  <div class="spinner"></div>\n' +
+      '  <div class="title">' + titleSafe + '</div>\n' +
+      '  <div class="status" id="loaderStatus">Preparing…</div>\n' +
+      '  <div class="bar-wrap"><div class="bar" id="loaderBar"></div></div>\n' +
+      '  <div class="mb" id="loaderMB"></div>\n' +
+      '</div>\n' +
+      '<script>\n' +
+      'window.__GAME_CFG__ = ' + cfgJson + ';\n' +
+      loaderScript + '\n' +
+      '<\/script>\n' +
+      '</body>\n</html>';
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+
+  // =================================================================
+  // Parent UI
+  // =================================================================
+  var menuEl = document.getElementById('menu');
+  var stageEl = document.getElementById('stage');
+  var frameHost = document.getElementById('frameHost');
+  var backBtn = document.getElementById('backBtn');
+  var currentIframe = null;
+  var currentUrl = null;
+
+  function openGame(g) {
+    closeGame();
+    var html = buildIframeHtml(g);
+    var blob = new Blob([html], { type: 'text/html' });
+    var url = URL.createObjectURL(blob);
+    var iframe = document.createElement('iframe');
+    iframe.setAttribute('allow',
+      'autoplay; encrypted-media; speaker-selection; fullscreen; gamepad; ' +
+      'accelerometer; gyroscope; microphone; camera; clipboard-write; ' +
+      'pointer-lock; vibrate; screen-wake-lock');
+    iframe.setAttribute('allowfullscreen', '');
+    iframe.src = url;
+    iframe.addEventListener('load', function () { try { iframe.focus(); } catch (e) {} });
+    frameHost.appendChild(iframe);
+    currentIframe = iframe; currentUrl = url;
+    menuEl.hidden = true; stageEl.hidden = false;
+  }
+
+  function closeGame() {
+    if (currentIframe && currentIframe.parentNode) currentIframe.parentNode.removeChild(currentIframe);
+    if (currentUrl) { try { URL.revokeObjectURL(currentUrl); } catch (e) {} }
+    currentIframe = null; currentUrl = null;
+    stageEl.hidden = true; menuEl.hidden = false;
+  }
+
+  backBtn.addEventListener('click', closeGame);
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !stageEl.hidden) closeGame();
+  });
+
+  var grid = document.getElementById('gameGrid');
+  GAMES.forEach(function (g) {
+    var card = document.createElement('button');
+    card.type = 'button'; card.className = 'card';
+    card.style.setProperty('--card-accent', g.accent || '#8b5cf6');
+    var thumb = document.createElement('span'); thumb.className = 'thumb';
+    var img = document.createElement('img');
+    img.alt = g.title; img.loading = 'lazy'; img.decoding = 'async';
+    img.src = g.cover;
+    img.addEventListener('error', function () { img.remove(); });
+    thumb.appendChild(img);
+    var name = document.createElement('span'); name.className = 'name'; name.textContent = g.title;
+    card.appendChild(thumb); card.appendChild(name);
+    card.addEventListener('click', function () { openGame(g); });
+    grid.appendChild(card);
+  });
+})();
+</script>
+</body>
+</html>
