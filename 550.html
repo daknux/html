@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#000000">
+  <title>Yandere Simulator Debug Build</title>
+  <link rel="icon" href="https://quizizz.com/_media/uploads/baa2e455-e076-40c8-981d-42272b622e40-v2">
+
+  <style>
+    body {
+      padding: 0;
+      margin: 0;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #unity-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #unity-canvas {
+      background: #000;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 16 / 9;
+      max-width: 100vw;
+      max-height: 100vh;
+      object-fit: contain;
+    }
+
+    #unity-loading-bar {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      display: none;
+    }
+
+    #unity-logo {
+      width: 154px;
+      height: 130px;
+      background: url('https://quizizz.com/_media/uploads/cf9e6804-c16c-4a32-9b6e-184c7e62fc9f-v2') no-repeat center;
+    }
+
+    #unity-progress-bar-empty {
+      width: 141px;
+      height: 18px;
+      margin-top: 10px;
+      margin-left: 6.5px;
+      background: url('https://quizizz.com/_media/uploads/77948f42-2e64-4235-a33f-7d26404f9330-v2') no-repeat center;
+    }
+
+    #unity-progress-bar-full {
+      width: 0%;
+      height: 18px;
+      margin-top: 10px;
+      background: url('https://quizizz.com/_media/uploads/8ff231b7-b998-438d-a8dd-9961a3299be1-v2') no-repeat center;
+    }
+
+    #unity-warning {
+      position: absolute;
+      left: 50%;
+      top: 5%;
+      transform: translate(-50%);
+      background: white;
+      padding: 10px;
+      display: none;
+    }
+
+    #percentProgress {
+      color: white;
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="unity-container">
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+
+    <div id="unity-loading-bar">
+      <div id="unity-logo"></div>
+      <div id="unity-progress-bar-empty">
+        <div id="unity-progress-bar-full"></div>
+      </div>
+      <h1 id="percentProgress">0%</h1>
+    </div>
+
+    <div id="unity-warning"></div>
+  </div>
+
+  <script>
+    const canvas = document.querySelector("#unity-canvas");
+    const loadingBar = document.querySelector("#unity-loading-bar");
+    const progressBar = document.querySelector("#unity-progress-bar-full");
+    const progressText = document.querySelector("#percentProgress");
+    const warningBanner = document.querySelector("#unity-warning");
+
+    function unityShowBanner(message, type) {
+      const div = document.createElement("div");
+      div.textContent = message;
+
+      if (type === "error") {
+        div.style.cssText = "background:red;padding:10px;";
+      } else if (type === "warning") {
+        div.style.cssText = "background:yellow;padding:10px;";
+        setTimeout(() => {
+          div.remove();
+          warningBanner.style.display = warningBanner.children.length ? "block" : "none";
+        }, 5000);
+      }
+
+      warningBanner.appendChild(div);
+      warningBanner.style.display = "block";
+    }
+
+    const config = {
+      dataUrl: "https://quizizz.com/_media/uploads/2383e3f3-b621-4d20-871d-7ea214a54207-v2",
+      frameworkUrl: "https://quizizz.com/_media/uploads/7719e8dc-28af-4c91-af1b-8a341d084ad9-v2",
+      codeUrl: "https://quizizz.com/_media/uploads/1324f20d-e38b-4686-a016-9d3dcbee6020-v2",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "Snubby",
+      productName: "Yandere Simulator Debug Build",
+      productVersion: "1.0",
+      showBanner: unityShowBanner
+    };
+
+    loadingBar.style.display = "block";
+
+    const script = document.createElement("script");
+    script.src = "https://quizizz.com/_media/uploads/394b553c-8df5-4d06-89ea-56d079336c6e-v2";
+
+    script.onload = () => {
+      createUnityInstance(canvas, config, (progress) => {
+        progressBar.style.width = `${100 * progress}%`;
+        progressText.textContent = `${Math.round(progress * 1000) / 10}%`;
+      }).then(() => {
+        loadingBar.style.display = "none";
+      }).catch((error) => {
+        unityShowBanner(error.message || String(error), "error");
+      });
+    };
+
+    script.onerror = () => {
+      unityShowBanner("Failed to load the Unity loader.", "error");
+    };
+
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>
