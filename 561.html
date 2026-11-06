@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, user-scalable=no"/>
+<title>Repin Develop</title>
+<script type="text/javascript" src="https://quizizz.com/_media/uploads/5d07c053-05db-4106-add6-e5738670a629-v2"></script>
+<script src="https://quizizz.com/_media/uploads/fadf2865-29a2-4fba-8216-bcd300871acf-v2"></script>
+<style type="text/css">
+        html {
+            position: relative;
+            min-height: 100%;
+        }
+
+        body {
+            height: 100%;
+            background-color: black;
+            background-repeat: no-repeat;
+            background-position: center;
+            overflow: hidden;
+            background-image: url("https://quizizz.com/_media/uploads/366580e3-8eaf-40c5-9e7c-b855a2250653-v2")
+        }
+    </style>
+</head>
+<body>
+<div style="width: 100%; background-color: #d19c96;">
+<div id="progress" style="width: 0%; height: 19px; background-color: #a790ba;"></div>
+</div>
+<canvas id="canvas"></canvas>
+<script src="https://quizizz.com/_media/uploads/e6e25193-71a5-40aa-a152-46b7a6e2eb42-v2"></script>
+<script>
+        const WASM_URL = "https://quizizz.com/_media/uploads/ed00c62d-76a8-4337-ba72-2d9ab39cc390-v2";
+        const PCK_URL = "https://quizizz.com/_media/uploads/06b70962-ba62-4fef-877e-3d7f684e94b5-v2";
+        const BRIDGE_CONFIG_URL = "https://quizizz.com/_media/uploads/9d31dfa2-0fe1-459b-8987-0d31f534d021-v2";
+
+        const originalFetch = window.fetch;
+        window.fetch = function(resource, init) {
+            const url = typeof resource === "string" ? resource : (resource && resource.url);
+            if (url && url.endsWith("index.wasm")) resource = WASM_URL;
+            else if (url && url.endsWith("index.pck")) resource = PCK_URL;
+            else if (url && url.endsWith("playgama-bridge-config.json")) resource = BRIDGE_CONFIG_URL;
+            return originalFetch.call(this, resource, init);
+        };
+
+        const id_for_game = new URLSearchParams(window.location.search).get("id_for_game");
+        let bridgeOptions = { platforms: { "game_distribution": { gameId: id_for_game } } }
+        const bridgeReady = (typeof bridge !== "undefined")
+            ? bridge.initialize(bridgeOptions).catch(() => {})
+            : Promise.resolve();
+        bridgeReady
+            .then(() => {
+                document.getElementById('progress').style.width = '10%';
+                const enginedata = "index";
+                const gamedata = "index.pck";
+                const engine = new Engine();
+                function pakoInflateFile(filePath) {
+                    return new Promise((resolve, reject) => {
+                        fetch(filePath)
+                            .then(response => response.arrayBuffer())
+                            .then(buffer => {
+                                document.getElementById('progress').style.width = '25%';
+                                const inflatedData = pako.inflate(buffer, { to: 'string' });
+                                resolve(inflatedData);
+                            })
+                            .catch(error => {
+                                reject(error);
+                            });
+                    });
+                }
+                async function loadAndInit() {
+                    try {
+                        const gameData = await pakoInflateFile(gamedata);
+                        document.getElementById('progress').style.width = '40%';
+                        const engineData = await pakoInflateFile("index.wasm");
+                        document.getElementById('progress').style.width = '50%';
+                        await engine.preloadFile(gamedata);
+                        document.getElementById('progress').style.width = '80%';
+                        await engine.init(enginedata);
+                        document.getElementById('progress').style.width = '100%';
+                        console.log('GZiped Engine Start. Telegram: https://t.me/repindevelop');
+                        await engine.start({ args: ['--main-pack', gamedata], focusCanvas: true });
+                    } catch (error) {
+                        console.error(error);
+                    }
+                }
+                loadAndInit();
+            })
+    </script>
+</body>
+</html>
