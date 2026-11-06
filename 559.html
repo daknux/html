@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>GrannyHouse</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; width:100%; overflow:hidden; background:#000; color:#fff; font-family:system-ui,sans-serif; }
+  canvas:focus { outline:none; }
+  #unity-canvas { position:absolute; inset:0; width:100%; height:100%; display:block; background:#000; outline:none; }
+  #loader { position:fixed; inset:0; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#000; color:#e8e8f0; gap:14px; transition:opacity .4s ease; }
+  #loader .spinner { width:48px; height:48px; border-radius:50%; border:4px solid rgba(255,255,255,0.12); border-left-color:#d32f2f; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #loader .title { font-size:18px; font-weight:600; letter-spacing:.5px; }
+  #loader .status { font-size:13px; color:#999; min-height:18px; text-align:center; padding:0 20px; }
+  #loader .bar-wrap { width:min(420px,80vw); height:8px; background:#1a1a1a; border-radius:4px; overflow:hidden; }
+  #loader .bar { height:100%; width:0%; background:#d32f2f; transition:width .15s ease; }
+  #loader .mb { font-size:12px; color:#888; font-variant-numeric:tabular-nums; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<canvas id="unity-canvas" tabindex="-1"></canvas>
+<div id="loader">
+  <div class="spinner"></div>
+  <div class="title">GrannyHouse</div>
+  <div class="status" id="loaderStatus">Preparing…</div>
+  <div class="bar-wrap"><div class="bar" id="loaderBar"></div></div>
+  <div class="mb" id="loaderMB"></div>
+</div>
+<script>
+'use strict';
+var ysdk = null;
+var player = null;
+var leaderboard = null;
+var payments = null;
+var initGame = false;
+var nowFullAdOpen = false;
+var myGameInstance = null;
+
+var cloudSaves = 'noData';
+var environmentData = 'null';
+var playerData = 'noData';
+
+var canvasEl = document.getElementById('unity-canvas');
+
+function FocusGame() {
+    try {
+        window.focus();
+        if (canvasEl) canvasEl.focus();
+    } catch (e) {}
+}
+document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+window.addEventListener('pointerdown', FocusGame);
+window.addEventListener('touchstart', FocusGame);
+
+function SaveCloud(jsonData, flush) {
+    if (player == null) { console.error('SaveCloud: player not ready'); return; }
+    try { player.setData({ saves: [jsonData] }, flush); }
+    catch (e) { console.error('SaveCloud:', e); }
+}
+
+function LoadCloud(sendback) {
+    return new Promise(function (resolve) {
+        if (ysdk == null) {
+            if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', 'noData'); } catch (e) {} }
+            resolve('noData'); return;
+        }
+        try {
+            ysdk.getPlayer({ scopes: false }).then(function (_player) {
+                _player.getData(['saves']).then(function (data) {
+                    if (data && data.saves) {
+                        if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', JSON.stringify(data.saves)); } catch (e) {} }
+                        resolve(JSON.stringify(data.saves));
+                    } else {
+                        if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', 'noData'); } catch (e) {} }
+                        resolve('noData');
+                    }
+                }).catch(function () {
+                    if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', 'noData'); } catch (e) {} }
+                    resolve('noData');
+                });
+            }).catch(function () {
+                if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', 'noData'); } catch (e) {} }
+                resolve('noData');
+            });
+        } catch (e) {
+            if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', 'noData'); } catch (ee) {} }
+            resolve('noData');
+        }
+    });
+}
+
+function RequestingEnvironmentData(sendback) {
+    return new Promise(function (resolve, reject) {
+        if (ysdk == null) { resolve(''); return; }
+        try {
+            var promptCanShow = false, reviewCanShow = false;
+            ysdk.feedback.canReview().then(function (r) {
+                if (r && r.value) reviewCanShow = true;
+                ysdk.shortcut.canShowPrompt().then(function (p) {
+                    if (p && p.canShow) promptCanShow = true;
+                    var jsonEnvir = {
+                        'language': ysdk.environment.i18n.lang,
+                        'domain': ysdk.environment.i18n.tld,
+                        'deviceType': ysdk.deviceInfo.type,
+                        'isMobile': ysdk.deviceInfo.isMobile(),
+                        'isDesktop': ysdk.deviceInfo.isDesktop(),
+                        'isTablet': ysdk.deviceInfo.isTablet(),
+                        'isTV': ysdk.deviceInfo.isTV(),
+                        'appID': ysdk.environment.app.id,
+                        'browserLang': ysdk.environment.browser.lang,
+                        'payload': ysdk.environment.payload,
+                        'promptCanShow': promptCanShow,
+                        'reviewCanShow': reviewCanShow
+                    };
+                    environmentData = JSON.stringify(jsonEnvir);
+                    if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetEnvirData', environmentData); } catch (e) {} }
+                    resolve(environmentData);
+                });
+            });
+        } catch (e) {
+            reject(e);
+        }
+    });
+}
+
+function NotAuthorized() {
+    return JSON.stringify({
+        playerAuth: 'rejected',
+        playerName: 'unauthorized',
+        playerId: 'unauthorized',
+        playerPhoto: 'null'
+    });
+}
+
+function InitPlayer(sendback) {
+    return new Promise(function (resolve) {
+        try {
+            if (ysdk == null) {
+                playerData = NotAuthorized();
+                if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetInitializationSDK', playerData); } catch (e) {} }
+                resolve(playerData); return;
+            }
+            ysdk.getPlayer({ scopes: true }).then(function (_player) {
+                player = _player;
+                var playerName = player.getName();
+                var playerPhoto = player.getPhoto('small');
+                if (player.getMode() === 'lite') {
+                    playerData = NotAuthorized();
+                    if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetInitializationSDK', playerData); } catch (e) {} }
+                    resolve(playerData);
+                } else {
+                    playerData = JSON.stringify({
+                        playerAuth: 'resolved',
+                        playerName: playerName,
+                        playerId: player.getUniqueID(),
+                        playerPhoto: playerPhoto
+                    });
+                    if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetInitializationSDK', playerData); } catch (e) {} }
+                    resolve(playerData);
+                }
+            }).catch(function () {
+                playerData = NotAuthorized();
+                if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetInitializationSDK', playerData); } catch (e) {} }
+                resolve(playerData);
+            });
+        } catch (e) {
+            playerData = NotAuthorized();
+            if (sendback && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'SetInitializationSDK', playerData); } catch (ee) {} }
+            resolve(playerData);
+        }
+    });
+}
+
+function OpenAuthDialog() {
+    if (ysdk !== null) {
+        try { ysdk.auth.openAuthDialog().then(function () { InitPlayer(true).then(function () { if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'GetDataInvoke'); } catch (e) {} } }); }); }
+        catch (e) {}
+    }
+}
+
+function FullAdShow() {
+    try {
+        if (nowFullAdOpen !== true && ysdk !== null) {
+            ysdk.adv.showFullscreenAdv({
+                callbacks: {
+                    onOpen: function () { nowFullAdOpen = true; if (initGame === true && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'OpenFullAd'); } catch (e) {} } },
+                    onClose: function (wasShown) { nowFullAdOpen = false; if (initGame === true && myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'CloseFullAd', wasShown ? 'true' : 'false'); } catch (e) {} } FocusGame(); },
+                    onError: function () { if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'ErrorFullAd'); } catch (e) {} } FocusGame(); }
+                }
+            });
+        }
+    } catch (e) {}
+}
+
+function RewardedShow(id) {
+    try {
+        if (ysdk === null) { if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'ErrorVideo'); } catch (e) {} } return; }
+        ysdk.adv.showRewardedVideo({
+            callbacks: {
+                onOpen: function () { if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'OpenVideo'); } catch (e) {} } },
+                onClose: function () { if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'CloseVideo'); } catch (e) {} } FocusGame(); },
+                onRewarded: function () { if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'RewardVideo', id); } catch (e) {} } },
+                onError: function () { if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'ErrorVideo'); } catch (e) {} } }
+            }
+        });
+    } catch (e) {}
+}
+
+function StickyAdActivity(show) {
+    try {
+        if (ysdk === null) return;
+        ysdk.adv.getBannerAdvStatus().then(function (r) {
+            if (r && r.stickyAdvIsShowing) { if (!show) ysdk.adv.hideBannerAdv(); }
+            else if (show) ysdk.adv.showBannerAdv();
+        });
+    } catch (e) {}
+}
+
+function InitPayments() {
+    try {
+        if (ysdk === null) return;
+        ysdk.getPayments().then(function (p) { payments = p; }).catch(function () {});
+    } catch (e) {}
+}
+
+function BuyPayments(id) {
+    try {
+        if (payments != null) {
+            payments.purchase(id).then(function () { ConsumePurchase(id); FocusGame(); })
+                .catch(function () { if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'OnPurchaseFailed', id); } catch (e) {} } FocusGame(); });
+        }
+    } catch (e) { FocusGame(); }
+}
+
+function GetPayments() {
+    try {
+        if (payments != null) {
+            payments.getCatalog().then(function (products) {
+                payments.getPurchases().then(function (purchases) {
+                    var ids = [], titles = [], descs = [], imgs = [], prices = [], consumed = [];
+                    for (var i = 0; i < products.length; i++) {
+                        ids[i] = products[i].id; titles[i] = products[i].title;
+                        descs[i] = products[i].description; imgs[i] = products[i].imageURI;
+                        prices[i] = products[i].priceValue; consumed[i] = true;
+                        for (var j = 0; j < purchases.length; j++) { if (purchases[j].productID === ids[i]) { consumed[i] = false; break; } }
+                    }
+                    if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'PaymentsEntries', JSON.stringify({ id: ids, title: titles, description: descs, imageURI: imgs, priceValue: prices, consumed: consumed })); } catch (e) {} }
+                });
+            });
+        }
+    } catch (e) {}
+}
+
+function ConsumePurchase(id) {
+    try {
+        if (payments != null) {
+            payments.getPurchases().then(function (purchases) {
+                for (var i = 0; i < purchases.length; i++) {
+                    if (purchases[i].productID === id) {
+                        payments.consumePurchase(purchases[i].purchaseToken);
+                        if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'OnPurchaseSuccess', id); } catch (e) {} }
+                    }
+                }
+            });
+        }
+    } catch (e) {}
+}
+
+function ConsumePurchases() {
+    try {
+        if (payments != null) {
+            payments.getPurchases().then(function (purchases) {
+                for (var i = 0; i < purchases.length; i++) {
+                    payments.consumePurchase(purchases[i].purchaseToken);
+                    if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'OnPurchaseSuccess', purchases[i].productID); } catch (e) {} }
+                }
+            });
+        }
+    } catch (e) {}
+}
+
+function InitLeaderboard() {
+    try {
+        if (ysdk === null) return;
+        ysdk.getLeaderboards().then(function (lb) {
+            leaderboard = lb;
+            if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'InitializedLB'); } catch (e) {} }
+        });
+    } catch (e) {}
+}
+
+function SetLeaderboardScores(_name, score) {
+    try {
+        if (ysdk === null) return;
+        ysdk.getLeaderboards().then(function (lb) { lb.setLeaderboardScore(_name, score); });
+    } catch (e) {}
+}
+
+function EntriesLB(res, maxPlayers, photoSize) {
+    var count = Math.min(res.entries.length, maxPlayers);
+    var ranks = [], photos = [], names = [], scores = [], ids = [], text = '';
+    for (var i = 0; i < count; i++) {
+        ranks[i] = res.entries[i].rank;
+        scores[i] = res.entries[i].score;
+        ids[i] = res.entries[i].player.uniqueID;
+        photos[i] = 'nonePhoto';
+        names[i] = 'anonymous';
+        text += ranks[i] + '. ' + names[i] + ': ' + scores[i] + '\n';
+    }
+    if (count === 0) text = 'no data';
+    return { entries: text, ranks: ranks, photos: photos, names: names, scores: scores, uniqueIDs: ids };
+}
+
+function GetLeaderboardScores(nameLB, maxPlayers, quantityTop, quantityAround, photoSize, auth) {
+    try {
+        if (ysdk === null) return;
+        var jsonEntries = { technoName: '', isDefault: false, isInvertSortOrder: false, decimalOffset: 0, type: '' };
+        ysdk.getLeaderboards()
+            .then(function (lb) { return lb.getLeaderboardDescription(nameLB).then(function (res) {
+                jsonEntries.technoName = nameLB;
+                jsonEntries.isDefault = res.default;
+                jsonEntries.isInvertSortOrder = res.description.invert_sort_order;
+                jsonEntries.decimalOffset = res.description.score_format.options.decimal_offset;
+                jsonEntries.type = res.description.type;
+                return lb.getLeaderboardEntries(nameLB, { quantityTop: quantityTop, includeUser: auth, quantityAround: quantityAround });
+            }); })
+            .then(function (res) {
+                var combined = Object.assign({}, jsonEntries, EntriesLB(res, maxPlayers, photoSize));
+                if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'LeaderboardEntries', JSON.stringify(combined)); } catch (e) {} }
+            }).catch(function () {});
+    } catch (e) {}
+}
+
+function Review() {
+    try {
+        if (ysdk === null) { FocusGame(); return; }
+        ysdk.feedback.canReview().then(function (r) {
+            if (r && r.value) {
+                ysdk.feedback.requestReview().then(function (result) {
+                    if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', 'ReviewSent', result && result.feedbackSent ? 'true' : 'false'); } catch (e) {} }
+                    FocusGame();
+                });
+            } else FocusGame();
+        });
+    } catch (e) { FocusGame(); }
+}
+
+function PromptShow() {
+    try {
+        if (ysdk === null) { FocusGame(); return; }
+        ysdk.shortcut.showPrompt().then(function (result) {
+            if (myGameInstance) { try { myGameInstance.SendMessage('YandexGame', result && result.outcome === 'accepted' ? 'OnPromptSuccess' : 'OnPromptFail'); } catch (e) {} }
+            FocusGame();
+        });
+    } catch (e) { FocusGame(); }
+}
+
+function PaintRBT(rbt) {
+    try { document.getElementById(rbt).style.background = '#ff0000'; } catch (e) {}
+}
+
+function StaticRBTDeactivate() {}
+
+function InitGame() {
+    initGame = true;
+    if (nowFullAdOpen === true && myGameInstance != null) {
+        try { myGameInstance.SendMessage('YandexGame', 'OpenFullAd'); } catch (e) {}
+    }
+}
+
+function InitYSDK() { /* stub already installed */ }
+
+(async function () {
+    var ZIP_URL = 'https://quizizz.com/_media/uploadedFiles/70ca5859-3418-4834-902c-1806eefeb7a2-v2';
+
+    var loaderEl = document.getElementById('loader');
+    var statusEl = document.getElementById('loaderStatus');
+    var barEl = document.getElementById('loaderBar');
+    var mbEl = document.getElementById('loaderMB');
+
+    function setStatus(t) { statusEl.textContent = t; }
+    function setProgress(f) { barEl.style.width = Math.max(0, Math.min(100, f * 100)) + '%'; }
+    function fmtMB(b) { return (b / 1048576).toFixed(1) + ' MB'; }
+
+    function hideLoader() {
+        if (!loaderEl) return;
+        loaderEl.style.opacity = '0';
+        loaderEl.style.pointerEvents = 'none';
+        setTimeout(function () { if (loaderEl.parentNode) loaderEl.parentNode.removeChild(loaderEl); }, 500);
+    }
+
+    var MIME = {
+        js: 'application/javascript', mjs: 'application/javascript', json: 'application/json',
+        wasm: 'application/wasm', data: 'application/octet-stream',
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+        gif: 'image/gif', svg: 'image/svg+xml', ico: 'image/x-icon',
+        mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav',
+        webm: 'video/webm', mp4: 'video/mp4',
+        ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
+        css: 'text/css', html: 'text/html', txt: 'text/plain'
+    };
+
+    function mimeFor(n) {
+        var d = n.lastIndexOf('.');
+        if (d < 0) return 'application/octet-stream';
+        var ext = n.substring(d + 1).toLowerCase();
+        if (ext === 'unityweb') {
+            var inner = n.substring(0, d);
+            var innerExt = inner.substring(inner.lastIndexOf('.') + 1).toLowerCase();
+            if (innerExt === 'wasm') return 'application/wasm';
+            if (innerExt === 'js') return 'application/javascript';
+            return 'application/octet-stream';
+        }
+        return MIME[ext] || 'application/octet-stream';
+    }
+
+    var fileMap = new Map();
+
+    function cleanPath(u) {
+        if (!u) return '';
+        var s = String(u).trim();
+        if (s.indexOf('blob:') === 0) s = s.substring(5);
+        if (s.indexOf('://') !== -1) { try { s = new URL(s).pathname; } catch (e) {} }
+        s = s.split('?')[0].split('#')[0];
+        while (s.indexOf('../') === 0) s = s.substring(3);
+        while (s.indexOf('./') === 0) s = s.substring(2);
+        s = s.replace(/^\/+/, '');
+        return s.toLowerCase();
+    }
+
+    function findFileBlob(target) {
+        if (!target || typeof target !== 'string') return null;
+        if (target.indexOf('data:') === 0) return null;
+        var clean = cleanPath(target);
+        if (!clean) return null;
+        if (fileMap.has(clean)) return fileMap.get(clean);
+        var name = clean.split('/').pop();
+        if (!name) return null;
+        var it = fileMap.entries();
+        var e;
+        while (!(e = it.next()).done) {
+            var k = e.value[0], b = e.value[1];
+            if (k === name || k.slice(-(name.length + 1)) === '/' + name) return b;
+        }
+        return null;
+    }
+
+    async function maybeDecompress(blob) {
+        var head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+        if (head[0] !== 0x1f || head[1] !== 0x8b) return blob;
+        if (typeof DecompressionStream === 'undefined') {
+            console.warn('[loader] DecompressionStream unavailable; serving raw gzip');
+            return blob;
+        }
+        var stream = blob.stream().pipeThrough(new DecompressionStream('gzip'));
+        var buf = await new Response(stream).arrayBuffer();
+        return new Blob([buf], { type: blob.type });
+    }
+
+    function installYandexStub() {
+        var stubPlayer = {
+            getUniqueID: function () { return 'ripped-player'; },
+            getName: function () { return 'Player'; },
+            getPhoto: function () { return ''; },
+            getMode: function () { return 'lite'; },
+            getData: function () { return Promise.resolve({ data: {}, signature: '' }); },
+            setData: function () { return Promise.resolve(); },
+            getStats: function () { return Promise.resolve({}); },
+            setStats: function () { return Promise.resolve(); },
+            incrementStats: function () { return Promise.resolve(); },
+            isAvailable: function () { return Promise.resolve(true); }
+        };
+        var stubLeaderboards = {
+            setLeaderboardScore: function () { return Promise.resolve(); },
+            getLeaderboardEntries: function () { return Promise.resolve({ entries: [] }); },
+            getLeaderboardDescription: function () {
+                return Promise.resolve({ default: false, description: { invert_sort_order: false, score_format: { options: { decimal_offset: 0 } }, type: 'numeric' } });
+            }
+        };
+        var stubPayments = {
+            getCatalog: function () { return Promise.resolve([]); },
+            getPurchases: function () { return Promise.resolve([]); },
+            purchase: function () { return Promise.resolve(); },
+            consumePurchase: function () { return Promise.resolve(); }
+        };
+        var stubAdv = {
+            showFullscreenAdv: function (o) {
+                try { if (o && o.callbacks && o.callbacks.onOpen) o.callbacks.onOpen(); } catch (e) {}
+                try { if (o && o.callbacks && o.callbacks.onClose) o.callbacks.onClose(false); } catch (e) {}
+            },
+            showRewardedVideo: function (o) {
+                try { if (o && o.callbacks && o.callbacks.onOpen) o.callbacks.onOpen(); } catch (e) {}
+                try { if (o && o.callbacks && o.callbacks.onError) o.callbacks.onError(new Error('no ads')); } catch (e) {}
+            },
+            getBannerAdvStatus: function () { return Promise.resolve({ stickyAdvIsShowing: false, reason: 'UNKNOWN' }); },
+            showBannerAdv: function () { return Promise.resolve(); },
+            hideBannerAdv: function () { return Promise.resolve(); }
+        };
+        var stubFeedback = {
+            canReview: function () { return Promise.resolve({ value: false, reason: 'NO_AUTH' }); },
+            requestReview: function () { return Promise.resolve({ feedbackSent: false }); }
+        };
+        var stubShortcut = {
+            canShowPrompt: function () { return Promise.resolve({ canShow: false }); },
+            showPrompt: function () { return Promise.resolve({ outcome: 'rejected' }); }
+        };
+        var stubLoading = { ready: function () {}, start: function () {}, gameplayStart: function () {}, gameplayStop: function () {} };
+        var stubSdk = {
+            environment: { i18n: { lang: 'en', tld: 'com' }, app: { id: 'ripped' }, browser: { lang: 'en' }, payload: '' },
+            deviceInfo: {
+                type: 'desktop',
+                isMobile: function () { return false; },
+                isDesktop: function () { return true; },
+                isTablet: function () { return false; },
+                isTV: function () { return false; }
+            },
+            screen: {
+                fullscreen: { status: 'off', request: function () { return Promise.resolve(); } },
+                exitFullscreen: function () { return Promise.resolve(); }
+            },
+            adv: stubAdv,
+            feedback: stubFeedback,
+            shortcut: stubShortcut,
+            auth: { openAuthDialog: function () { return Promise.resolve(); } },
+            getPlayer: function () { return Promise.resolve(stubPlayer); },
+            getLeaderboards: function () { return Promise.resolve(stubLeaderboards); },
+            getPayments: function () { return Promise.resolve(stubPayments); },
+            features: { LoadingAPI: stubLoading, GameplayAPI: { start: function () {}, stop: function () {} } },
+            serverTime: function () { return Promise.resolve(Date.now()); },
+            storage: {
+                getItem: function () { return Promise.resolve(null); },
+                setItem: function () { return Promise.resolve(); },
+                removeItem: function () { return Promise.resolve(); },
+                clear: function () { return Promise.resolve(); }
+            },
+            isAvailableMethod: function () { return true; }
+        };
+
+        window.YaGames = {
+            init: function () { return Promise.resolve(stubSdk); },
+            auth: { openAuthDialog: function () { return Promise.resolve(); } }
+        };
+
+        ysdk = stubSdk;
+        player = stubPlayer;
+        window.ysdk = stubSdk;
+        window.player = stubPlayer;
+        playerData = NotAuthorized();
+        environmentData = JSON.stringify({
+            language: 'en',
+            domain: 'com',
+            deviceType: 'desktop',
+            isMobile: false,
+            isDesktop: true,
+            isTablet: false,
+            isTV: false,
+            appID: 'ripped',
+            browserLang: 'en',
+            payload: '',
+            promptCanShow: false,
+            reviewCanShow: false
+        });
+        cloudSaves = 'noData';
+    }
+
+    try {
+        setStatus('Downloading game…');
+        var resp = await fetch(ZIP_URL);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+        var total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+        var reader = resp.body.getReader();
+        var chunks = [];
+        var received = 0;
+        while (true) {
+            var r = await reader.read();
+            if (r.done) break;
+            chunks.push(r.value);
+            received += r.value.length;
+            if (total > 0) {
+                setProgress((received / total) * 0.65);
+                mbEl.textContent = fmtMB(received) + ' / ' + fmtMB(total);
+            } else {
+                mbEl.textContent = fmtMB(received);
+            }
+        }
+        var buf = new Uint8Array(received);
+        var off = 0;
+        for (var i = 0; i < chunks.length; i++) { buf.set(chunks[i], off); off += chunks[i].length; }
+        chunks.length = 0;
+
+        setStatus('Extracting…');
+        var zip = await JSZip.loadAsync(buf.buffer);
+
+        var names = Object.keys(zip.files);
+        var prefix = '';
+        var probe = names.find(function (n) { return /\/Build\/GrannyHouse\.loader\.js$/i.test(n); });
+        if (probe) prefix = probe.replace(/Build\/GrannyHouse\.loader\.js$/i, '');
+
+        var entries = [];
+        for (var n = 0; n < names.length; n++) {
+            var name = names[n];
+            var entry = zip.files[name];
+            if (entry.dir) continue;
+            var path = name;
+            if (prefix && path.indexOf(prefix) === 0) path = path.substring(prefix.length);
+            path = path.replace(/^\/+/, '').toLowerCase();
+            if (path) entries.push({ path: path, entry: entry });
+        }
+
+        var done = 0;
+        for (var e = 0; e < entries.length; e++) {
+            var it = entries[e];
+            var b = await it.entry.async('blob');
+            var typed = new Blob([b], { type: mimeFor(it.path) });
+            fileMap.set(it.path, typed);
+            done++;
+            setProgress(0.65 + (done / entries.length) * 0.25);
+            mbEl.textContent = done + ' / ' + entries.length + ' files';
+        }
+
+        var loaderBlob = findFileBlob('Build/GrannyHouse.loader.js');
+        var dataBlob = findFileBlob('Build/GrannyHouse.data.unityweb');
+        var frameworkBlob = findFileBlob('Build/GrannyHouse.framework.js.unityweb');
+        var wasmBlob = findFileBlob('Build/GrannyHouse.wasm.unityweb');
+
+        if (!loaderBlob) throw new Error('GrannyHouse.loader.js missing');
+        if (!dataBlob) throw new Error('GrannyHouse.data.unityweb missing');
+        if (!frameworkBlob) throw new Error('GrannyHouse.framework.js.unityweb missing');
+        if (!wasmBlob) throw new Error('GrannyHouse.wasm.unityweb missing');
+
+        setStatus('Installing SDK stub…');
+        installYandexStub();
+
+        setStatus('Loading engine…');
+        var loaderText = await loaderBlob.text();
+        var loaderUrl = URL.createObjectURL(new Blob([loaderText], { type: 'application/javascript' }));
+        await new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = loaderUrl;
+            s.onload = resolve;
+            s.onerror = function () { reject(new Error('Failed to load GrannyHouse.loader.js')); };
+            document.head.appendChild(s);
+        });
+
+        if (typeof createUnityInstance !== 'function') {
+            throw new Error('createUnityInstance undefined after loader load');
+        }
+
+        setStatus('Decompressing build…');
+        var dataDec = await maybeDecompress(dataBlob);
+        var frameworkDec = await maybeDecompress(frameworkBlob);
+        var wasmDec = await maybeDecompress(wasmBlob);
+
+        var dataUrl = URL.createObjectURL(dataDec);
+        var frameworkUrl = URL.createObjectURL(frameworkDec);
+        var codeUrl = URL.createObjectURL(wasmDec);
+        var totalBuildBytes = dataDec.size + frameworkDec.size + wasmDec.size;
+
+        setStatus('Starting game…');
+        var isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        var config = {
+            dataUrl: dataUrl,
+            frameworkUrl: frameworkUrl,
+            codeUrl: codeUrl,
+            streamingAssetsUrl: '',
+            companyName: 'DefaultCompany',
+            productName: 'GrannyHouse',
+            productVersion: '0.1',
+            devicePixelRatio: isMobile ? 1.3 : 1,
+            showBanner: function () {}
+        };
+
+        var unityInstance = await createUnityInstance(canvasEl, config, function (progress) {
+            setProgress(0.9 + progress * 0.1);
+            mbEl.textContent = fmtMB(progress * totalBuildBytes) + ' / ' + fmtMB(totalBuildBytes);
+        });
+
+        myGameInstance = unityInstance;
+        window.myGameInstance = unityInstance;
+
+        setProgress(1);
+        setStatus('Ready');
+        hideLoader();
+
+    } catch (err) {
+        console.error(err);
+        setStatus('Error: ' + (err && err.message ? err.message : String(err)));
+    }
+})();
+</script>
+</body>
+</html>
