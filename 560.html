@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,user-scalable=no">
+<title>Five Nights at Freddy's Remaster</title>
+
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
+canvas{display:block;width:100%;height:100%}
+
+#status{
+	position:absolute;
+	inset:0;
+	display:flex;
+	align-items:center;
+	justify-content:center;
+	visibility:hidden;
+	pointer-events:none
+}
+
+#spinner{
+	width:36px;
+	height:36px;
+	border:4px solid #444;
+	border-top-color:#fff;
+	border-radius:50%;
+	animation:spin .8s linear infinite
+}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+
+#progress{
+	width:366px;
+	height:7px;
+	padding:1px;
+	background:#38363a;
+	border:1px solid #444;
+	border-radius:2px
+}
+
+#progress>div{
+	width:0;
+	height:100%;
+	background:#fff;
+	transition:width .3s
+}
+
+#error{
+	padding:8px 12px;
+	color:#fff;
+	font:14px Arial,sans-serif;
+	background:#333;
+	border:1px solid #555;
+	border-radius:4px
+}
+
+@media(orientation:portrait){
+	#progress{width:61.8%}
+}
+</style>
+</head>
+
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="status">
+	<div id="spinner"></div>
+	<div id="progress"><div></div></div>
+	<div id="error"></div>
+</div>
+
+<script>
+(function () {
+	function stub(name, fn) {
+		if (typeof window[name] !== 'function') {
+			try { window[name] = fn; } catch (e) {}
+		}
+	}
+
+	stub('show_fullscreen_ad', function (cb) {
+		if (typeof cb !== 'function') return;
+		try { cb('open'); } catch (e) {}
+		setTimeout(function () { try { cb('close'); } catch (e) {} }, 100);
+	});
+	stub('show_reward_ad', function (cb) {
+		if (typeof cb !== 'function') return;
+		try { cb('error'); } catch (e) {}
+	});
+	stub('show_banner', function () {});
+	stub('hide_banner', function () {});
+
+	stub('InitGame', function (params, cb) {
+		if (typeof cb === 'function') { try { cb(); } catch (e) {} }
+	});
+
+	stub('initialize_payments', function (cb) {
+		if (typeof cb === 'function') { try { cb('fail'); } catch (e) {} }
+	});
+	stub('is_payments_initialized', function () { return false; });
+	stub('purchase_item', function (item_id, cb_ok, cb_fail) {
+		if (typeof cb_fail === 'function') { try { cb_fail(item_id); } catch (e) {} }
+	});
+	stub('update_purchases', function (cb, purchases, catalog) {
+		if (Array.isArray(purchases)) purchases.length = 0;
+		if (Array.isArray(catalog))   catalog.length = 0;
+		if (typeof cb === 'function') { try { cb('fail'); } catch (e) {} }
+	});
+	stub('consume_purchase', function () {});
+	stub('get_item_icon_uri', function () { return ''; });
+
+	stub('get_object_environment', function () {
+		return { i18n: { lang: 'en', tld: 'com' } };
+	});
+	stub('get_environment_i18n', function () {
+		return { lang: 'en', tld: 'com' };
+	});
+	stub('get_environment_i18n_top_level_domain', function () { return 'com'; });
+	stub('get_object_device_info', function () {
+		return { type: 'desktop' };
+	});
+
+	if (navigator.serviceWorker && typeof navigator.serviceWorker.getRegistration === 'function') {
+		var origGetReg = navigator.serviceWorker.getRegistration.bind(navigator.serviceWorker);
+		try {
+			navigator.serviceWorker.getRegistration = function () {
+				return origGetReg().catch(function () { return undefined; });
+			};
+		} catch (e) {}
+	}
+	window.addEventListener('unhandledrejection', function (e) {
+		var reason = e.reason && String(e.reason) || '';
+		if (/ServiceWorker|InvalidStateError|invalid state/i.test(reason)) {
+			e.preventDefault();
+		}
+	});
+})();
+</script>
+
+<script src="https://quizizz.com/_media/uploadedFiles/c85aacbe-1878-4933-a474-e4ba53c90c7d-v2"></script>
+
+<script>
+const BASE_URL="https://quizizz.com/_media/uploadedFiles/";
+
+const PACK_URL=BASE_URL+"98eafea4-014c-4ada-a150-100fe2a1de7b-v2";
+const WASM_URL=BASE_URL+"b0b50788-c90a-4fed-8af9-d686b14522b1-v2";
+
+const GODOT_CONFIG={
+	args:[],
+	canvasResizePolicy:2,
+	executable:"index",
+	experimentalVK:false,
+	focusCanvas:true,
+	gdnativeLibs:[],
+	mainPack:PACK_URL,
+	fileSizes:{
+		[PACK_URL]:42459792,
+		[WASM_URL]:13793958
+	},
+	onPrintError: function () {
+		var msg = Array.prototype.join.call(arguments, ' ');
+		if (msg.indexOf('Error calling method') !== -1) return;
+		console.error.apply(console, arguments);
+	},
+	onPrint: function () {
+		var msg = Array.prototype.join.call(arguments, ' ');
+		if (/yandex (payment initialazing|sdk i18n)/i.test(msg)) return;
+		console.log.apply(console, arguments);
+	}
+};
+
+const status=document.getElementById("status");
+const spinner=document.getElementById("spinner");
+const progress=document.getElementById("progress");
+const progressBar=progress.firstElementChild;
+const error=document.getElementById("error");
+
+progress.style.display="none";
+error.style.display="none";
+
+const originalFetch=window.fetch;
+
+window.fetch=function(resource,init){
+	const url=typeof resource==="string"
+		?resource
+		:resource.url;
+
+	if(url?.endsWith("index.wasm"))
+		resource=WASM_URL;
+
+	return originalFetch.call(this,resource,init);
+};
+
+function showStatus(mode){
+	spinner.style.display=mode==="spinner"?"block":"none";
+	progress.style.display=mode==="progress"?"block":"none";
+	error.style.display=mode==="error"?"block":"none";
+
+	if(mode==="hidden"){
+		status.style.visibility="hidden";
+		status.style.display="none";
+	}else{
+		status.style.visibility="visible";
+		status.style.display="flex";
+	}
+}
+
+function showError(errorMessage){
+	error.textContent=errorMessage.message||errorMessage;
+	console.error(errorMessage);
+	showStatus("error");
+}
+
+if(!Engine.isWebGLAvailable()){
+	showError("WebGL not available");
+}else{
+	showStatus("spinner");
+
+	const engine=new Engine(GODOT_CONFIG);
+
+	engine.startGame({
+		onProgress(current,total){
+			if(total>0){
+				progressBar.style.width=current/total*100+"%";
+				showStatus("progress");
+
+				if(current===total){
+					setTimeout(()=>showStatus("spinner"),500);
+				}
+			}else{
+				showStatus("spinner");
+			}
+		}
+	}).then(
+		()=>{
+			status.style.visibility="hidden";
+			status.style.display="none";
+		},
+		showError
+	);
+}
+</script>
+</body>
+</html>
