@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DeltaBosses</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+  html, body {
+    margin:0; padding:0; width:100vw; height:100vh;
+    overflow:hidden; background:#000; color:#fff;
+    font-family:sans-serif;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:rgba(0,0,0,0);
+  }
+  canvas:focus { outline:none; }
+  #unity-canvas {
+    width:100vw; height:100vh; display:block;
+    position:absolute; left:0; top:0; background:#000; outline:none;
+  }
+  #loader {
+    position:fixed; inset:0; z-index:9999;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:#000; color:#fff;
+    transition:opacity .4s ease;
+  }
+  #loader .spinner {
+    width:50px; height:50px; border-radius:50%;
+    border:4px solid rgba(255,255,255,0.1);
+    border-left-color:#09f;
+    animation:spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #loader .status {
+    margin-top:16px; font-size:14px; opacity:0.85;
+    min-height:18px; text-align:center; padding:0 20px;
+  }
+  #loader .bar-wrap {
+    margin-top:20px;
+    width:260px; height:8px;
+    background:rgba(255,255,255,0.1);
+    border-radius:4px; overflow:hidden;
+  }
+  #loader .bar {
+    height:100%; width:0%; background:#09f;
+    transition:width .15s linear;
+  }
+  #loader .mb {
+    margin-top:6px; font-size:12px; opacity:0.5;
+    font-variant-numeric:tabular-nums;
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<canvas id="unity-canvas" tabindex="-1"></canvas>
+<div id="loader">
+  <div class="spinner"></div>
+  <div class="status" id="loaderStatus">Preparing…</div>
+  <div class="bar-wrap"><div class="bar" id="loaderBar"></div></div>
+  <div class="mb" id="loaderMB"></div>
+</div>
+<script>
+'use strict';
+
+var canvas = document.getElementById('unity-canvas');
+var ygGameInstance = null;
+var ysdk = null;
+var player = null;
+var initYSDK = false;
+var initGame = false;
+var isVisibility = true;
+var isPausedGame = false;
+var nowFullAdOpen = false;
+var cloudSaves = 'no data';
+var environmentData = 'no data';
+var playerData = 'no data';
+var NO_DATA = 'no data';
+var pendingMessages = [];
+
+function LogStyledMessage(m, s) { console.log('%c' + m, s || 'color:#FFDF73;background:#454545'); }
+function FocusGame() { if (!isPausedGame) { try { window.focus(); canvas.focus(); } catch(e){} } }
+function SetVisibility(v) {
+    if (ysdk !== null && initGame === true && isVisibility !== v) {
+        isVisibility = v;
+        YG2Instance('SetFocusWindowGame', v ? 'true' : 'false');
+    }
+}
+function PauseCallback() { isPausedGame = true; YG2Instance('SetPauseGame', 'true'); }
+function ResumeCallback() { isPausedGame = false; YG2Instance('SetPauseGame', 'false'); }
+
+function YG2Instance(method, arg) {
+    if (ygGameInstance == null) {
+        pendingMessages.push({ method: method, arg: arg });
+        return;
+    }
+    var send = function () {
+        if (!ygGameInstance) return false;
+        try {
+            if (arg !== undefined) ygGameInstance.SendMessage('YG2Instance', method, arg);
+            else ygGameInstance.SendMessage('YG2Instance', method);
+            return true;
+        } catch (e) { return false; }
+    };
+    if (!initGame) {
+        setTimeout(function () { if (!send()) setTimeout(send, 1000); }, 300);
+    } else {
+        send();
+    }
+}
+
+function flushPendingMessages() {
+    if (!ygGameInstance || !pendingMessages.length) return;
+    var list = pendingMessages.splice(0);
+    var i = 0;
+    var next = function () {
+        if (i >= list.length || !ygGameInstance) return;
+        var m = list[i++];
+        try {
+            if (m.arg !== undefined) ygGameInstance.SendMessage('YG2Instance', m.method, m.arg);
+            else ygGameInstance.SendMessage('YG2Instance', m.method);
+        } catch (e) {}
+        setTimeout(next, 50);
+    };
+    next();
+}
+
+function InitGame() {
+    initGame = true;
+    setTimeout(function () { if (isPausedGame) YG2Instance('SetPauseGame', 'true'); }, 100);
+    flushPendingMessages();
+}
+
+function SaveCloud(jsonData, flush) {
+    if (player == null) return;
+    try { player.setData({ saves: [jsonData] }, flush); } catch (e) {}
+}
+
+function LoadCloud() {
+    return new Promise(function (resolve) {
+        if (ysdk == null) { return Final(NO_DATA); }
+        try {
+            player.getData(['saves']).then(function (data) {
+                if (data && data.saves) Final(JSON.stringify(data.saves));
+                else Final(NO_DATA);
+            }).catch(function () { Final(NO_DATA); });
+        } catch (e) { Final(NO_DATA); }
+        function Final(res) { cloudSaves = res; YG2Instance('SetLoadSaves', res); resolve(res); }
+    });
+}
+
+function InterAdvShow() {
+    if (ysdk == null || nowFullAdOpen) return;
+    try {
+        ysdk.adv.showFullscreenAdv({
+            callbacks: {
+                onOpen: function () { nowFullAdOpen = true; if (initGame) YG2Instance('OpenInterAdv'); },
+                onClose: function (wasShown) { nowFullAdOpen = false; if (initGame) YG2Instance('CloseInterAdv', wasShown ? 'true' : 'false'); FocusGame(); },
+                onError: function () { nowFullAdOpen = false; YG2Instance('ErrorInterAdv'); FocusGame(); }
+            }
+        });
+    } catch (e) {}
+}
+
+function RewardedShow(id) {
+    try {
+        if (ysdk === null) { YG2Instance('ErrorVideo'); return; }
+        ysdk.adv.showRewardedVideo({
+            callbacks: {
+                onOpen: function () { YG2Instance('OpenVideo'); },
+                onClose: function () { YG2Instance('CloseVideo'); FocusGame(); },
+                onRewarded: function () { YG2Instance('RewardVideo', id); },
+                onError: function () { YG2Instance('ErrorVideo'); }
+            }
+        });
+    } catch (e) { YG2Instance('ErrorVideo'); }
+}
+
+function StickyAdActivity(show) {
+    try {
+        if (ysdk === null) return;
+        ysdk.adv.getBannerAdvStatus().then(function (r) {
+            if (r && r.stickyAdvIsShowing) { if (!show) ysdk.adv.hideBannerAdv(); }
+            else if (show) ysdk.adv.showBannerAdv();
+        });
+    } catch (e) {}
+}
+
+function Review() {
+    try {
+        if (ysdk === null) { FocusGame(); return; }
+        ysdk.feedback.canReview().then(function (r) {
+            if (r && r.value) {
+                ysdk.feedback.requestReview().then(function (result) {
+                    YG2Instance('ReviewSent', result && result.feedbackSent ? 'true' : 'false');
+                    FocusGame();
+                });
+            } else FocusGame();
+        });
+    } catch (e) { FocusGame(); }
+}
+
+function PromptShow() {
+    try {
+        if (ysdk === null) { FocusGame(); return; }
+        ysdk.shortcut.showPrompt().then(function (result) {
+            YG2Instance(result && result.outcome === 'accepted' ? 'OnPromptSuccess' : 'OnPromptFail');
+            FocusGame();
+        });
+    } catch (e) { FocusGame(); }
+}
+
+function SetLeaderboardScores(name, score) {
+    try {
+        if (ysdk === null) return;
+        ysdk.getLeaderboards().then(function (lb) { lb.setLeaderboardScore(name, score); });
+    } catch (e) {}
+}
+
+function GetLeaderboardScores(name, maxPlayers, quantityTop, quantityAround, photoSize, auth) {
+    try {
+        if (ysdk === null) return;
+        ysdk.getLeaderboards().then(function (lb) {
+            lb.getLeaderboardEntries(name, { quantityTop: quantityTop, includeUser: auth, quantityAround: quantityAround }).then(function (res) {
+                var combined = {
+                    technoName: name, isDefault: false, isInvertSortOrder: false, decimalOffset: 0, type: 'numeric',
+                    entries: 'no data', ranks: [], photos: [], names: [], scores: [], uniqueIDs: []
+                };
+                if (res && res.entries && res.entries.length) {
+                    var text = '';
+                    for (var i = 0; i < Math.min(res.entries.length, maxPlayers); i++) {
+                        combined.ranks.push(res.entries[i].rank);
+                        combined.scores.push(res.entries[i].score);
+                        combined.uniqueIDs.push(res.entries[i].player && res.entries[i].player.uniqueID || '');
+                        combined.photos.push('nonePhoto');
+                        combined.names.push('anonymous');
+                        text += combined.ranks[i] + '. ' + combined.names[i] + ': ' + combined.scores[i] + '\n';
+                    }
+                    combined.entries = text || 'no data';
+                }
+                YG2Instance('LeaderboardEntries', JSON.stringify(combined));
+            });
+        });
+    } catch (e) {}
+}
+
+function InitPayments() {
+    try {
+        if (ysdk === null) return;
+        ysdk.getPayments().then(function () {});
+    } catch (e) {}
+}
+
+function GetPayments() {
+    try {
+        if (ysdk === null) return;
+        ysdk.getPayments().then(function (p) {
+            p.getCatalog().then(function (products) {
+                p.getPurchases().then(function (purchases) {
+                    var ids = [], titles = [], descs = [], imgs = [], prices = [], consumed = [];
+                    for (var i = 0; i < products.length; i++) {
+                        ids[i] = products[i].id; titles[i] = products[i].title;
+                        descs[i] = products[i].description; imgs[i] = products[i].imageURI;
+                        prices[i] = products[i].priceValue; consumed[i] = true;
+                    }
+                    YG2Instance('PaymentsEntries', JSON.stringify({ id: ids, title: titles, description: descs, imageURI: imgs, priceValue: prices, consumed: consumed }));
+                });
+            });
+        });
+    } catch (e) {}
+}
+
+function BuyPayments(id) {
+    try {
+        if (ysdk === null) return;
+        ysdk.getPayments().then(function (p) {
+            p.purchase(id).then(function () { ConsumePurchase(id); FocusGame(); })
+                .catch(function () { YG2Instance('OnPurchaseFailed', id); FocusGame(); });
+        });
+    } catch (e) { FocusGame(); }
+}
+
+function ConsumePurchase(id) {
+    try {
+        if (ysdk === null) return;
+        ysdk.getPayments().then(function (p) {
+            p.getPurchases().then(function (purchases) {
+                for (var i = 0; i < purchases.length; i++) {
+                    if (purchases[i].productID === id) {
+                        p.consumePurchase(purchases[i].purchaseToken);
+                        YG2Instance('OnPurchaseSuccess', id);
+                    }
+                }
+            });
+        });
+    } catch (e) {}
+}
+
+function ConsumePurchases() {
+    try {
+        if (ysdk === null) return;
+        ysdk.getPayments().then(function (p) {
+            p.getPurchases().then(function (purchases) {
+                for (var i = 0; i < purchases.length; i++) {
+                    p.consumePurchase(purchases[i].purchaseToken);
+                    YG2Instance('OnPurchaseSuccess', purchases[i].productID);
+                }
+            });
+        });
+    } catch (e) {}
+}
+
+function PaintRBT(rbt) {
+    try { document.getElementById(rbt).style.background = '#ff0000'; } catch (e) {}
+}
+
+function StaticRBTDeactivate() {}
+
+function RequestingEnvironmentData() {
+    return new Promise(function (resolve) {
+        if (ysdk == null) { return Final(NO_DATA); }
+        try {
+            var b = navigator.userAgent;
+            if (/YaBrowser|YaSearchBrowser/.test(b)) b = 'Yandex';
+            else if (/Opera|OPR/.test(b)) b = 'Opera';
+            else if (/Firefox/.test(b)) b = 'Firefox';
+            else if (/MSIE/.test(b)) b = 'IE';
+            else if (/Edge/.test(b)) b = 'Edge';
+            else if (/Chrome/.test(b)) b = 'Chrome';
+            else if (/Safari/.test(b)) b = 'Safari';
+            else b = 'Other';
+            var j = {
+                language: ysdk.environment.i18n.lang,
+                domain: ysdk.environment.i18n.tld,
+                deviceType: ysdk.deviceInfo.type,
+                isMobile: ysdk.deviceInfo.isMobile(),
+                isDesktop: ysdk.deviceInfo.isDesktop(),
+                isTablet: ysdk.deviceInfo.isTablet(),
+                isTV: ysdk.deviceInfo.isTV(),
+                appID: ysdk.environment.app.id,
+                browserLang: ysdk.environment.browser.lang,
+                payload: ysdk.environment.payload,
+                platform: navigator.platform,
+                browser: b
+            };
+            Final(JSON.stringify(j));
+        } catch (e) { Final(NO_DATA); }
+        function Final(res) { environmentData = res; YG2Instance('SetEnvirData', res); resolve(res); }
+    });
+}
+
+function NotAuthorized(hasPlayer) {
+    return JSON.stringify({
+        playerAuth: 'rejected',
+        playerName: 'unauthorized',
+        playerId: (hasPlayer && player) ? player.getUniqueID() : 'unauthorized',
+        playerPhoto: 'no data',
+        payingStatus: 'unknown'
+    });
+}
+
+function InitPlayer() {
+    return new Promise(function (resolve) {
+        if (!ysdk) { return Final(NotAuthorized(false)); }
+        Promise.resolve(ysdk.getPlayer()).then(function (p) {
+            player = p;
+            if (!player || !player.isAuthorized || !player.isAuthorized()) {
+                Final(NotAuthorized(true));
+                return;
+            }
+            Final(JSON.stringify({
+                playerAuth: 'resolved',
+                playerName: player.getName(),
+                playerId: player.getUniqueID(),
+                playerPhoto: player.getPhoto('medium'),
+                payingStatus: player.getPayingStatus ? player.getPayingStatus() : 'unknown'
+            }));
+        }).catch(function () { player = null; Final(NotAuthorized(false)); });
+        function Final(res) { playerData = res; YG2Instance('SetAuth', res); resolve(res); }
+    });
+}
+
+function OpenAuthDialog() {
+    if (!ysdk) return;
+    try {
+        ysdk.getPlayer().then(function (p) {
+            player = p;
+            InitPlayer().then(function () { YG2Instance('LoggedIn'); });
+        });
+    } catch (e) { InitPlayer(); }
+}
+
+function IsLocalHost() {
+    try {
+        if (window.top !== window) return false;
+        var h = window.location.hostname;
+        if (h === 'localhost' || h === '127.0.0.1' || h.endsWith('.local')) return true;
+    } catch (e) { return false; }
+    return false;
+}
+
+window.LogStyledMessage = LogStyledMessage;
+window.FocusGame = FocusGame;
+window.SetVisibility = SetVisibility;
+window.PauseCallback = PauseCallback;
+window.ResumeCallback = ResumeCallback;
+window.YG2Instance = YG2Instance;
+window.InitGame = InitGame;
+window.SaveCloud = SaveCloud;
+window.LoadCloud = LoadCloud;
+window.InterAdvShow = InterAdvShow;
+window.RewardedShow = RewardedShow;
+window.StickyAdActivity = StickyAdActivity;
+window.Review = Review;
+window.PromptShow = PromptShow;
+window.SetLeaderboardScores = SetLeaderboardScores;
+window.GetLeaderboardScores = GetLeaderboardScores;
+window.InitPayments = InitPayments;
+window.GetPayments = GetPayments;
+window.BuyPayments = BuyPayments;
+window.ConsumePurchase = ConsumePurchase;
+window.ConsumePurchases = ConsumePurchases;
+window.PaintRBT = PaintRBT;
+window.StaticRBTDeactivate = StaticRBTDeactivate;
+window.RequestingEnvironmentData = RequestingEnvironmentData;
+window.NotAuthorized = NotAuthorized;
+window.InitPlayer = InitPlayer;
+window.OpenAuthDialog = OpenAuthDialog;
+window.IsLocalHost = IsLocalHost;
+window.InitYSDK = InitYSDK;
+
+function installYandexStub() {
+    var dataStore = {}, listeners = {};
+    var stubPlayer = {
+        getUniqueID: function () { return 'ripped-player'; },
+        getName: function () { return 'Player'; },
+        getPhoto: function () { return ''; },
+        getMode: function () { return 'lite'; },
+        isAuthorized: function () { return false; },
+        getPayingStatus: function () { return 'unknown'; },
+        getData: function () { return Promise.resolve({ data: {}, signature: '' }); },
+        setData: function (d) { if (d) Object.assign(dataStore, d); return Promise.resolve(); },
+        getStats: function () { return Promise.resolve({}); },
+        setStats: function () { return Promise.resolve(); },
+        incrementStats: function () { return Promise.resolve(); }
+    };
+    var stubAdv = {
+        showFullscreenAdv: function (o) {
+            try { if (o && o.callbacks && o.callbacks.onOpen) o.callbacks.onOpen(); } catch (e) {}
+            try { if (o && o.callbacks && o.callbacks.onClose) o.callbacks.onClose(false); } catch (e) {}
+        },
+        showRewardedVideo: function (o) {
+            try { if (o && o.callbacks && o.callbacks.onError) o.callbacks.onError(new Error('no ads')); } catch (e) {}
+        },
+        getBannerAdvStatus: function () { return Promise.resolve({ stickyAdvIsShowing: false, reason: '' }); },
+        showBannerAdv: function () { return Promise.resolve(); },
+        hideBannerAdv: function () { return Promise.resolve(); }
+    };
+    var stubSdk = {
+        environment: { i18n: { lang: 'en', tld: 'com' }, app: { id: 'ripped' }, browser: { lang: 'en' }, payload: '' },
+        deviceInfo: { type: 'desktop', isMobile: function () { return false; }, isDesktop: function () { return true; }, isTablet: function () { return false; }, isTV: function () { return false; } },
+        screen: { fullscreen: { status: 'off', request: function () { return Promise.resolve(); } }, exitFullscreen: function () { return Promise.resolve(); } },
+        adv: stubAdv,
+        feedback: { canReview: function () { return Promise.resolve({ value: false, reason: 'NO_AUTH' }); }, requestReview: function () { return Promise.resolve({ feedbackSent: false }); } },
+        shortcut: { canShowPrompt: function () { return Promise.resolve({ canShow: false }); }, showPrompt: function () { return Promise.resolve({ outcome: 'rejected' }); } },
+        auth: { openAuthDialog: function () { return Promise.resolve(); } },
+        getPlayer: function () { return Promise.resolve(stubPlayer); },
+        getLeaderboards: function () { return Promise.resolve({ setLeaderboardScore: function () { return Promise.resolve(); }, getLeaderboardEntries: function () { return Promise.resolve({ entries: [] }); }, getLeaderboardDescription: function () { return Promise.resolve({ default: false, description: { invert_sort_order: false, score_format: { options: { decimal_offset: 0 } }, type: 'numeric' } }); } }); },
+        getPayments: function () { return Promise.resolve({ getCatalog: function () { return Promise.resolve([]); }, getPurchases: function () { return Promise.resolve([]); }, purchase: function () { return Promise.resolve(); }, consumePurchase: function () { return Promise.resolve(); } }); },
+        features: { LoadingAPI: { ready: function () {}, start: function () {}, gameplayStart: function () {}, gameplayStop: function () {} }, GameplayAPI: { start: function () {}, stop: function () {} } },
+        storage: { getItem: function () { return Promise.resolve(null); }, setItem: function () { return Promise.resolve(); }, removeItem: function () { return Promise.resolve(); }, clear: function () { return Promise.resolve(); } },
+        on: function (ev, cb) { if (!listeners[ev]) listeners[ev] = []; listeners[ev].push(cb); },
+        serverTime: function () { return Promise.resolve(Date.now()); }
+    };
+    window.YaGames = {
+        init: function () { return Promise.resolve(stubSdk); },
+        auth: { openAuthDialog: function () { return Promise.resolve(); } }
+    };
+}
+
+async function InitYSDK() {
+    try {
+        if (IsLocalHost()) return;
+        ysdk = await window.YaGames.init();
+        try { ysdk.on('game_api_pause', PauseCallback); } catch (e) {}
+        try { ysdk.on('game_api_resume', ResumeCallback); } catch (e) {}
+        await RequestingEnvironmentData();
+        await InitPlayer();
+        await LoadCloud();
+        initYSDK = true;
+        if (ygGameInstance != null) {
+            try { ygGameInstance.SendMessage('YG2Instance', 'InitSDKComplete'); } catch (e) {}
+        }
+    } catch (e) { console.error('SDK init error:', e); }
+}
+
+function hideLoader() {
+    var el = document.getElementById('loader');
+    if (!el) return;
+    el.style.opacity = '0';
+    el.style.pointerEvents = 'none';
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+}
+
+function setStatus(t) { var el = document.getElementById('loaderStatus'); if (el) el.textContent = t; }
+function setProgress(f) { var el = document.getElementById('loaderBar'); if (el) el.style.width = Math.max(0, Math.min(100, f * 100)) + '%'; }
+function fmtMB(b) { return (b / 1048576).toFixed(1) + ' MB'; }
+
+var MIME = {
+    js: 'application/javascript', mjs: 'application/javascript', json: 'application/json',
+    wasm: 'application/wasm', data: 'application/octet-stream', zip: 'application/zip',
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+    gif: 'image/gif', svg: 'image/svg+xml', ico: 'image/x-icon',
+    mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', opus: 'audio/opus',
+    webm: 'video/webm', mp4: 'video/mp4',
+    ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
+    css: 'text/css', html: 'text/html', txt: 'text/plain'
+};
+function mimeFor(n) {
+    var d = n.lastIndexOf('.');
+    return d < 0 ? 'application/octet-stream' : (MIME[n.substring(d + 1).toLowerCase()] || 'application/octet-stream');
+}
+function mimeForBr(n) {
+    if (/\.data\.br$/i.test(n)) return 'application/octet-stream';
+    if (/\.wasm\.br$/i.test(n)) return 'application/wasm';
+    if (/\.framework\.js\.br$/i.test(n)) return 'application/javascript';
+    if (/\.js\.br$/i.test(n)) return 'application/javascript';
+    return 'application/octet-stream';
+}
+
+var fileMap = new Map();
+
+function cleanPath(u) {
+    if (!u) return '';
+    var s = String(u).trim();
+    if (s.startsWith('blob:')) s = s.substring(5);
+    if (s.indexOf('://') !== -1) { try { s = new URL(s).pathname; } catch (e) {} }
+    s = s.split('?')[0].split('#')[0];
+    while (s.startsWith('../')) s = s.substring(3);
+    while (s.startsWith('./')) s = s.substring(2);
+    s = s.replace(/^\/+/, '');
+    return s.toLowerCase();
+}
+
+function findFileBlob(target) {
+    if (!target || typeof target !== 'string') return null;
+    if (target.startsWith('data:')) return null;
+    var clean = cleanPath(target);
+    if (!clean) return null;
+    if (fileMap.has(clean)) return fileMap.get(clean);
+    var name = clean.split('/').pop();
+    if (!name) return null;
+    var it = fileMap.entries(), e;
+    while (!(e = it.next()).done) {
+        var k = e.value[0], b = e.value[1];
+        if (k === name || k.endsWith('/' + name)) return b;
+    }
+    return null;
+}
+
+function startsWithBytes(bytes, pattern) {
+    if (bytes.length < pattern.length) return false;
+    for (var i = 0; i < pattern.length; i++) if (bytes[i] !== pattern[i]) return false;
+    return true;
+}
+function startsWithAscii(bytes, str) {
+    if (bytes.length < str.length) return false;
+    for (var i = 0; i < str.length; i++) if (bytes[i] !== str.charCodeAt(i)) return false;
+    return true;
+}
+function hexDump(bytes, len) {
+    var n = Math.min(len || 32, bytes.length);
+    var parts = [];
+    for (var i = 0; i < n; i++) parts.push(bytes[i].toString(16).padStart(2, '0'));
+    return parts.join(' ');
+}
+function looksAlreadyDecompressed(bytes, filename) {
+    if (!bytes || bytes.length < 4) return false;
+    if (/\.data(\.br)?$/i.test(filename)) {
+        if (startsWithAscii(bytes, 'UnityWebData')) return true;
+    }
+    if (/\.wasm(\.br)?$/i.test(filename)) {
+        if (startsWithBytes(bytes, [0x00, 0x61, 0x73, 0x6D])) return true;
+    }
+    if (/\.(framework\.)?js(\.br)?$/i.test(filename)) {
+        var b0 = bytes[0], b1 = bytes[1];
+        if (b0 === 0x2F && b1 === 0x2A) return true;
+        if (b0 === 0x28) return true;
+        if (b0 === 0x21) return true;
+        if (b0 === 0x76 && b1 === 0x61) return true;
+        if (b0 === 0x3B) return true;
+        if (b0 === 0x0A || b0 === 0x0D) return true;
+        if ((b0 === 0x22 || b0 === 0x27) && bytes.length > 4) return true;
+        if (startsWithAscii(bytes, 'var ') || startsWithAscii(bytes, 'const ') || startsWithAscii(bytes, 'let ')) return true;
+        if (startsWithAscii(bytes, 'import ') || startsWithAscii(bytes, 'export ')) return true;
+    }
+    return false;
+}
+
+async function decompressBytes(bytes, filename) {
+    if (looksAlreadyDecompressed(bytes, filename)) return bytes;
+    if (bytes.length >= 2 && bytes[0] === 0x1F && bytes[1] === 0x8B) {
+        try {
+            var dsG = new DecompressionStream('gzip');
+            var sG = new Blob([bytes]).stream().pipeThrough(dsG);
+            return new Uint8Array(await new Response(sG).arrayBuffer());
+        } catch (e) {}
+    }
+    throw new Error('Cannot decompress ' + filename + '. First bytes: ' + hexDump(bytes, 32));
+}
+
+(async function () {
+    try {
+        setStatus('Downloading game…');
+        var ZIP_URL = 'https://quizizz.com/_media/uploadedFiles/7c61d53d-3329-4437-9ef6-4bcfdcbbdf24-v2';
+        var resp = await fetch(ZIP_URL);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+        var reader = resp.body.getReader();
+        var chunks = [], received = 0;
+        while (true) {
+            var r = await reader.read();
+            if (r.done) break;
+            chunks.push(r.value);
+            received += r.value.length;
+            if (total > 0) {
+                setProgress((received / total) * 0.5);
+                document.getElementById('loaderMB').textContent = fmtMB(received) + ' / ' + fmtMB(total);
+            } else {
+                document.getElementById('loaderMB').textContent = fmtMB(received);
+            }
+        }
+        var buf = new Uint8Array(received);
+        var off = 0;
+        for (var i = 0; i < chunks.length; i++) { buf.set(chunks[i], off); off += chunks[i].length; }
+        chunks.length = 0;
+
+        setStatus('Extracting…');
+        var zip = await JSZip.loadAsync(buf.buffer);
+        var names = Object.keys(zip.files);
+
+        var prefix = '';
+        var probe = names.find(function (n) { return /Build\/WebBuild\.loader\.js$/i.test(n); });
+        if (probe) prefix = probe.replace(/Build\/WebBuild\.loader\.js$/i, '');
+
+        var entries = [];
+        for (var n = 0; n < names.length; n++) {
+            var nm = names[n];
+            var ent = zip.files[nm];
+            if (ent.dir) continue;
+            var p = nm;
+            if (prefix && p.indexOf(prefix) === 0) p = p.substring(prefix.length);
+            p = p.replace(/^\/+/, '').toLowerCase();
+            if (p) entries.push({ path: p, entry: ent });
+        }
+
+        var done = 0;
+        for (var ei = 0; ei < entries.length; ei++) {
+            var it = entries[ei];
+            var b = await it.entry.async('blob');
+            var isBr = /\.br$/i.test(it.path);
+            var typed;
+            if (isBr) {
+                setStatus('Processing ' + it.path.split('/').pop() + '…');
+                try {
+                    var dec = await decompressBytes(new Uint8Array(await b.arrayBuffer()), it.path);
+                    typed = new Blob([dec], { type: mimeForBr(it.path) });
+                } catch (err) {
+                    throw new Error('Failed to process ' + it.path + ': ' + err.message);
+                }
+            } else {
+                typed = new Blob([b], { type: mimeFor(it.path) });
+            }
+            fileMap.set(it.path, typed);
+            done++;
+            setProgress(0.5 + (done / entries.length) * 0.2);
+            document.getElementById('loaderMB').textContent = done + ' / ' + entries.length + ' files';
+        }
+
+        var nativeFetch = window.fetch;
+        window.fetch = async function (input, init) {
+            var urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+            if (urlStr && !urlStr.startsWith('blob:') && !urlStr.startsWith('data:')) {
+                var blob = findFileBlob(urlStr);
+                if (blob) {
+                    return new Response(blob, {
+                        status: 200,
+                        headers: { 'Content-Type': blob.type || 'application/octet-stream', 'Content-Length': String(blob.size) }
+                    });
+                }
+            }
+            return nativeFetch.apply(this, arguments);
+        };
+
+        var nativeXhrOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (method, url) {
+            if (typeof url === 'string' && !url.startsWith('blob:') && !url.startsWith('data:')) {
+                var blob = findFileBlob(url);
+                if (blob) {
+                    var args = Array.prototype.slice.call(arguments);
+                    args[1] = URL.createObjectURL(blob);
+                    return nativeXhrOpen.apply(this, args);
+                }
+            }
+            return nativeXhrOpen.apply(this, arguments);
+        };
+
+        var patchSrc = function (proto) {
+            var d = Object.getOwnPropertyDescriptor(proto, 'src');
+            if (!d || !d.set) return;
+            Object.defineProperty(proto, 'src', {
+                configurable: true, enumerable: d.enumerable,
+                get: function () { return this.__overrideSrc || (d.get ? d.get.call(this) : ''); },
+                set: function (v) {
+                    if (typeof v === 'string' && !v.startsWith('blob:') && !v.startsWith('data:')) {
+                        var bl = findFileBlob(v);
+                        if (bl) { d.set.call(this, URL.createObjectURL(bl)); return; }
+                    }
+                    d.set.call(this, v);
+                }
+            });
+        };
+        patchSrc(HTMLImageElement.prototype);
+        patchSrc(HTMLMediaElement.prototype);
+        patchSrc(HTMLSourceElement.prototype);
+        patchSrc(HTMLScriptElement.prototype);
+
+        var nativeSetAttribute = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function (name, value) {
+            if (name && String(name).toLowerCase() === 'src' && typeof value === 'string' && !value.startsWith('blob:') && !value.startsWith('data:')) {
+                var bl = findFileBlob(value);
+                if (bl) value = URL.createObjectURL(bl);
+            }
+            return nativeSetAttribute.call(this, name, value);
+        };
+
+        var NativeWorker = window.Worker;
+        window.Worker = function (url, options) {
+            var urlStr = (url && typeof url.href === 'string') ? url.href : String(url);
+            if (urlStr && !urlStr.startsWith('blob:')) {
+                var bl = findFileBlob(urlStr);
+                if (bl) url = URL.createObjectURL(new Blob([bl], { type: 'application/javascript' }));
+            }
+            return new NativeWorker(url, options);
+        };
+        window.Worker.prototype = NativeWorker.prototype;
+
+        var oRequestPointerLock = Element.prototype.requestPointerLock;
+        if (oRequestPointerLock) {
+            Element.prototype.requestPointerLock = function () {
+                var args = Array.prototype.slice.call(arguments);
+                try { (args[0] = args[0] || {}).unadjustedMovement = true; } catch (e) {}
+                return oRequestPointerLock.apply(this, args);
+            };
+        }
+
+        installYandexStub();
+
+        var loaderBlob = findFileBlob('Build/WebBuild.loader.js');
+        var dataBlob = findFileBlob('Build/WebBuild.data.br') || findFileBlob('Build/WebBuild.data');
+        var frameworkBlob = findFileBlob('Build/WebBuild.framework.js.br') || findFileBlob('Build/WebBuild.framework.js');
+        var wasmBlob = findFileBlob('Build/WebBuild.wasm.br') || findFileBlob('Build/WebBuild.wasm');
+        if (!loaderBlob) throw new Error('WebBuild.loader.js missing');
+        if (!dataBlob) throw new Error('WebBuild.data(.br) missing');
+        if (!frameworkBlob) throw new Error('WebBuild.framework.js(.br) missing');
+        if (!wasmBlob) throw new Error('WebBuild.wasm(.br) missing');
+
+        setStatus('Loading engine…');
+        var loaderText = await loaderBlob.text();
+        var loaderUrl = URL.createObjectURL(new Blob([loaderText], { type: 'application/javascript' }));
+        await new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.__overrideSrc = 'https://game.local/Build/WebBuild.loader.js';
+            s.src = loaderUrl;
+            s.onload = resolve;
+            s.onerror = function () { reject(new Error('Failed to load WebBuild.loader.js')); };
+            document.head.appendChild(s);
+        });
+
+        if (typeof createUnityInstance !== 'function') {
+            throw new Error('createUnityInstance undefined after loader');
+        }
+
+        setStatus('Starting game…');
+        var dataUrl = URL.createObjectURL(dataBlob);
+        var frameworkUrl = URL.createObjectURL(frameworkBlob);
+        var codeUrl = URL.createObjectURL(wasmBlob);
+        var totalBuildBytes = dataBlob.size + frameworkBlob.size + wasmBlob.size;
+
+        var config = {
+            dataUrl: dataUrl,
+            frameworkUrl: frameworkUrl,
+            codeUrl: codeUrl,
+            streamingAssetsUrl: 'StreamingAssets',
+            companyName: 'HonoLite',
+            productName: 'DeltaBosses',
+            productVersion: '1.0'
+        };
+
+        var unityInstance = await createUnityInstance(canvas, config, function (progress) {
+            setProgress(0.7 + progress * 0.28);
+            document.getElementById('loaderMB').textContent = fmtMB(progress * totalBuildBytes) + ' / ' + fmtMB(totalBuildBytes);
+        });
+
+        ygGameInstance = unityInstance;
+        window.ygGameInstance = unityInstance;
+        window.myGameInstance = unityInstance;
+
+        setTimeout(flushPendingMessages, 500);
+        setTimeout(flushPendingMessages, 1500);
+        setTimeout(flushPendingMessages, 3000);
+
+        try { await InitYSDK(); } catch (e) { console.error('SDK init:', e); }
+        setTimeout(flushPendingMessages, 500);
+
+        setProgress(1);
+        setStatus('Ready');
+        hideLoader();
+
+    } catch (err) {
+        console.error(err);
+        setStatus('Error: ' + (err && err.message ? err.message : String(err)));
+    }
+})();
+
+document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+document.addEventListener('visibilitychange', function () { SetVisibility(!document.hidden); });
+window.addEventListener('blur', function () { SetVisibility(false); });
+window.addEventListener('focus', function () { SetVisibility(true); });
+window.addEventListener('pointerdown', function () { FocusGame(); SetVisibility(true); });
+</script>
+</body>
+</html>
