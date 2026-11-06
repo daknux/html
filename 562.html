@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Piano Play</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; width:100%; overflow:hidden; background:#000; color:#fff; font-family:system-ui,sans-serif; }
+  #embed-html { width:100%; height:100%; }
+  #embed-html canvas { display:block; margin:0 auto; }
+  #loader { position:fixed; inset:0; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#0a0a18; color:#e8e8f0; gap:14px; transition:opacity .4s ease; }
+  #loader .spinner { width:48px; height:48px; border-radius:50%; border:4px solid rgba(92,177,214,0.15); border-left-color:#5cb1d6; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #loader .title { font-size:18px; font-weight:600; letter-spacing:.5px; }
+  #loader .status { font-size:13px; color:#99a; min-height:18px; text-align:center; padding:0 20px; }
+  #loader .bar-wrap { width:min(420px,80vw); height:8px; background:#1a1a2a; border-radius:4px; overflow:hidden; }
+  #loader .bar { height:100%; width:0%; background:#5cb1d6; transition:width .15s ease; }
+  #loader .mb { font-size:12px; color:#778; font-variant-numeric:tabular-nums; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<div align="center" id="embed-html"></div>
+
+<div id="loader">
+  <div class="spinner"></div>
+  <div class="title">Piano Play</div>
+  <div class="status" id="loaderStatus">Preparing…</div>
+  <div class="bar-wrap"><div class="bar" id="loaderBar"></div></div>
+  <div class="mb" id="loaderMB"></div>
+</div>
+
+<script>
+'use strict';
+
+(function () {
+  var embed = document.getElementById('embed-html');
+  if (!embed) return;
+  embed.addEventListener('mousedown', function (e) {
+    e.preventDefault(); e.stopPropagation();
+    try { window.focus(); } catch (err) {}
+  }, false);
+  embed.addEventListener('mouseup', function (e) {
+    e.preventDefault(); e.stopPropagation();
+  }, false);
+})();
+
+(function () {
+  var stubPlayer = {
+    getUniqueID: function () { return 'ripped-player'; },
+    getName: function () { return 'Player'; },
+    getPhoto: function () { return ''; },
+    getMode: function () { return 'lite'; },
+    getData: function () { return Promise.resolve({ data: {}, signature: '' }); },
+    setData: function () { return Promise.resolve(); },
+    getStats: function () { return Promise.resolve({}); },
+    setStats: function () { return Promise.resolve(); },
+    incrementStats: function () { return Promise.resolve(); },
+    isAvailable: function () { return Promise.resolve(true); }
+  };
+  var stubAdv = {
+    showFullscreenAdv: function (o) {
+      try { if (o && o.callbacks && o.callbacks.onOpen) o.callbacks.onOpen(); } catch (e) {}
+      try { if (o && o.callbacks && o.callbacks.onClose) o.callbacks.onClose(false); } catch (e) {}
+    },
+    showRewardedVideo: function (o) {
+      try { if (o && o.callbacks && o.callbacks.onOpen) o.callbacks.onOpen(); } catch (e) {}
+      try { if (o && o.callbacks && o.callbacks.onError) o.callbacks.onError(new Error('no ads')); } catch (e) {}
+    },
+    getBannerAdvStatus: function () { return Promise.resolve({ stickyAdvIsShowing: false, reason: 'UNKNOWN' }); },
+    showBannerAdv: function () { return Promise.resolve(); },
+    hideBannerAdv: function () { return Promise.resolve(); }
+  };
+  var stubSdk = {
+    environment: { i18n: { lang: 'en', tld: 'com' }, app: { id: 'ripped' }, browser: { lang: 'en' }, payload: '' },
+    deviceInfo: { type: 'desktop', isMobile: function () { return false; }, isDesktop: function () { return true; }, isTablet: function () { return false; }, isTV: function () { return false; } },
+    screen: { fullscreen: { status: 'off', request: function () { return Promise.resolve(); } }, exitFullscreen: function () { return Promise.resolve(); } },
+    adv: stubAdv,
+    feedback: { canReview: function () { return Promise.resolve({ value: false, reason: 'NO_AUTH' }); }, requestReview: function () { return Promise.resolve({ feedbackSent: false }); } },
+    shortcut: { canShowPrompt: function () { return Promise.resolve({ canShow: false }); }, showPrompt: function () { return Promise.resolve({ outcome: 'rejected' }); } },
+    auth: { openAuthDialog: function () { return Promise.resolve(); } },
+    getPlayer: function () { return Promise.resolve(stubPlayer); },
+    getLeaderboards: function () { return Promise.resolve({ setLeaderboardScore: function () { return Promise.resolve(); }, getLeaderboardEntries: function () { return Promise.resolve({ entries: [] }); }, getLeaderboardDescription: function () { return Promise.resolve({ default: false, description: { invert_sort_order: false, score_format: { options: { decimal_offset: 0 } }, type: 'numeric' } }); } }); },
+    getPayments: function () { return Promise.resolve({ getCatalog: function () { return Promise.resolve([]); }, getPurchases: function () { return Promise.resolve([]); }, purchase: function () { return Promise.resolve(); }, consumePurchase: function () { return Promise.resolve(); } }); },
+    features: { LoadingAPI: { ready: function () {} }, GameplayAPI: { start: function () {}, stop: function () {} } },
+    serverTime: function () { return Promise.resolve(Date.now()); },
+    storage: { getItem: function () { return Promise.resolve(null); }, setItem: function () { return Promise.resolve(); }, removeItem: function () { return Promise.resolve(); }, clear: function () { return Promise.resolve(); } },
+    isAvailableMethod: function () { return true; }
+  };
+  window.YaGames = { init: function () { return Promise.resolve(stubSdk); }, auth: { openAuthDialog: function () { return Promise.resolve(); } } };
+  window.ysdk = stubSdk;
+  window.lang = 'en';
+})();
+
+(async function () {
+  var ZIP_URL = 'https://quizizz.com/_media/uploadedFiles/0eaa16cf-021c-49e6-9f68-7d2be2a53fe3-v2';
+
+  var loaderEl = document.getElementById('loader');
+  var statusEl = document.getElementById('loaderStatus');
+  var barEl = document.getElementById('loaderBar');
+  var mbEl = document.getElementById('loaderMB');
+
+  function setStatus(t) { statusEl.textContent = t; }
+  function setProgress(f) { barEl.style.width = Math.max(0, Math.min(100, f * 100)) + '%'; }
+  function fmtMB(b) { return (b / 1048576).toFixed(1) + ' MB'; }
+  function hideLoader() {
+    if (!loaderEl) return;
+    loaderEl.style.opacity = '0';
+    loaderEl.style.pointerEvents = 'none';
+    setTimeout(function () { if (loaderEl.parentNode) loaderEl.parentNode.removeChild(loaderEl); }, 500);
+  }
+
+  var MIME = {
+    js: 'application/javascript', mjs: 'application/javascript', json: 'application/json',
+    wasm: 'application/wasm', data: 'application/octet-stream',
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+    gif: 'image/gif', svg: 'image/svg+xml', ico: 'image/x-icon', bmp: 'image/bmp',
+    mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', opus: 'audio/opus', m4a: 'audio/mp4',
+    webm: 'video/webm', mp4: 'video/mp4',
+    ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
+    css: 'text/css', html: 'text/html', txt: 'text/plain',
+    fnt: 'application/octet-stream', glsl: 'text/plain'
+  };
+  function mimeFor(n) {
+    var d = n.lastIndexOf('.');
+    return d < 0 ? 'application/octet-stream' : (MIME[n.substring(d + 1).toLowerCase()] || 'application/octet-stream');
+  }
+
+  var fileMap = new Map();
+  var objectUrls = new Map();
+  function assetUrl(blob) {
+    if (!objectUrls.has(blob)) objectUrls.set(blob, URL.createObjectURL(blob));
+    return objectUrls.get(blob);
+  }
+  function resolveAsset(url) {
+    if (typeof url !== 'string' || /^(?:blob:|data:|javascript:|#)/i.test(url)) return url;
+    var blob = findFileBlob(url);
+    return blob ? assetUrl(blob) : url;
+  }
+  function rewriteCss(css) {
+    return String(css).replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi, function(all, quote, url) {
+      var resolved = resolveAsset(url.trim());
+      return resolved === url.trim() ? all : 'url("' + resolved + '")';
+    });
+  }
+
+  function cleanPath(u) {
+    if (!u) return '';
+    var s = String(u).trim();
+    if (s.indexOf('blob:') === 0) s = s.substring(5);
+    if (s.indexOf('://') !== -1) { try { s = new URL(s).pathname; } catch (e) {} }
+    s = s.split('?')[0].split('#')[0];
+    while (s.indexOf('../') === 0) s = s.substring(3);
+    while (s.indexOf('./') === 0) s = s.substring(2);
+    s = s.replace(/^\/+/, '');
+    s = s.replace(/\\/g, '/');
+    var parts = [];
+    s.split('/').forEach(function(p) { if (p === '..') parts.pop(); else if (p && p !== '.') parts.push(p); });
+    return parts.join('/').toLowerCase();
+  }
+
+  function findFileBlob(target) {
+    if (!target || typeof target !== 'string') return null;
+    if (target.indexOf('data:') === 0) return null;
+    var clean = cleanPath(target);
+    try { clean = decodeURIComponent(clean); } catch (_) {}
+    if (!clean) return null;
+    if (fileMap.has(clean)) return fileMap.get(clean);
+    if (clean.indexOf('html/') === 0) {
+      var noHtml = clean.substring(5);
+      if (fileMap.has(noHtml)) return fileMap.get(noHtml);
+    } else {
+      var withHtml = 'html/' + clean;
+      if (fileMap.has(withHtml)) return fileMap.get(withHtml);
+    }
+    if (typeof logicalAssets !== 'undefined' && logicalAssets && logicalAssets.has(clean)) return logicalAssets.get(clean);
+    var name = clean.split('/').pop();
+    if (!name) return null;
+    var it = fileMap.entries();
+    var e;
+    while (!(e = it.next()).done) {
+      var k = e.value[0], b = e.value[1];
+      if (k === name || k.slice(-(name.length + 1)) === '/' + name) return b;
+    }
+    return null;
+  }
+
+  try {
+    setStatus('Downloading game…');
+    var resp = await fetch(ZIP_URL);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+    var total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+    var reader = resp.body.getReader();
+    var chunks = [];
+    var received = 0;
+    while (true) {
+      var r = await reader.read();
+      if (r.done) break;
+      chunks.push(r.value);
+      received += r.value.length;
+      if (total > 0) {
+        setProgress((received / total) * 0.55);
+        mbEl.textContent = fmtMB(received) + ' / ' + fmtMB(total);
+      } else {
+        mbEl.textContent = fmtMB(received);
+      }
+    }
+    var buf = new Uint8Array(received);
+    var off = 0;
+    for (var i = 0; i < chunks.length; i++) { buf.set(chunks[i], off); off += chunks[i].length; }
+    chunks.length = 0;
+
+    setStatus('Extracting…');
+    var zip = await JSZip.loadAsync(buf.buffer);
+    var names = Object.keys(zip.files);
+
+    var prefix = '';
+    var probe = names.find(function (n) { return /\/html\/html\.nocache\.js$/i.test(n); });
+    if (probe) prefix = probe.replace(/html\/html\.nocache\.js$/i, '');
+
+    var entries = [];
+    for (var n = 0; n < names.length; n++) {
+      var name = names[n];
+      var entry = zip.files[name];
+      if (entry.dir) continue;
+      var path = name;
+      if (prefix && path.indexOf(prefix) === 0) path = path.substring(prefix.length);
+      path = path.replace(/^\/+/, '').toLowerCase();
+      if (path) entries.push({ path: path, entry: entry });
+    }
+
+    var done = 0;
+    for (var e = 0; e < entries.length; e++) {
+      var it = entries[e];
+      var b = await it.entry.async('blob');
+      fileMap.set(it.path, new Blob([b], { type: mimeFor(it.path) }));
+      done++;
+      setProgress(0.55 + (done / entries.length) * 0.25);
+      mbEl.textContent = done + ' / ' + entries.length + ' files';
+    }
+
+    setStatus('Preparing runtime…');
+
+    function patchGameScript(source) { return source; }
+
+    var permTextMap = new Map();
+    var iter = fileMap.entries();
+    var kv;
+    while (!(kv = iter.next()).done) {
+      var k = kv.value[0];
+      if (/^html\/[^/]+\.cache\.js$/i.test(k)) {
+        var t = await kv.value[1].text();
+        permTextMap.set(k.split('/').pop().toLowerCase(), patchGameScript(t));
+      }
+    }
+
+    var manifestBlob = findFileBlob('assets/assets.txt');
+    var logicalAssets = new Map();
+    if (manifestBlob) {
+      (await manifestBlob.text()).split(/\r?\n/).forEach(function(line) {
+        var parts = line.split(':');
+        if (parts.length < 3 || parts[0] === 'd') return;
+        var logical = parts[1], physical = parts[2];
+        var key = 'assets/' + physical;
+        var blob = fileMap.get(cleanPath(key));
+        if (blob) {
+          logicalAssets.set(cleanPath(logical), blob);
+          logicalAssets.set(cleanPath('assets/' + logical), blob);
+          fileMap.set(cleanPath('assets/' + logical), blob);
+        }
+      });
+      console.info('[Piano Play] Manifest asset aliases:', logicalAssets.size);
+    }
+
+    function installRealm(realm) {
+      try {
+        if (!realm || realm.__pianoAssetPatchInstalled) return;
+        realm.__pianoAssetPatchInstalled = true;
+        var imageProto = realm.HTMLImageElement && realm.HTMLImageElement.prototype;
+        if (imageProto) {
+          var original = Object.getOwnPropertyDescriptor(imageProto, 'src');
+          if (original && original.set) Object.defineProperty(imageProto, 'src', {
+            configurable:true, enumerable:original.enumerable,
+            get:function(){return this.__pianoLogicalSrc || original.get.call(this);},
+            set:function(value){this.__pianoLogicalSrc = String(value); return original.set.call(this, resolveAsset(String(value)));}
+          });
+        }
+        var setAttr = realm.Element && realm.Element.prototype.setAttribute;
+        if (setAttr) realm.Element.prototype.setAttribute = function(name, value) {
+          var key = String(name).toLowerCase();
+          if (key === 'src' || key === 'href' || key === 'poster') value = resolveAsset(String(value));
+          return setAttr.call(this, name, value);
+        };
+
+        if (realm.Image) {
+          var NativeImage = realm.Image;
+          realm.Image = new Proxy(NativeImage, {
+            construct:function(target, args){return Reflect.construct(target,args);},
+            apply:function(target, that, args){return Reflect.construct(target,args);}
+          });
+          realm.Image.prototype = NativeImage.prototype;
+        }
+        console.info('[Piano Play] Installed asset hooks in realm', realm === window ? 'main' : 'GWT iframe');
+      } catch(err) {console.warn('[Piano Play] Could not patch frame',err);}
+    }
+    installRealm(window);
+
+    var frameWinDesc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+    if (frameWinDesc && frameWinDesc.get && frameWinDesc.configurable) {
+      Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+        configurable:true, get:function(){var w=frameWinDesc.get.call(this);installRealm(w);return w;}
+      });
+    }
+    var frameDocDesc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentDocument');
+    if (frameDocDesc && frameDocDesc.get && frameDocDesc.configurable) {
+      Object.defineProperty(HTMLIFrameElement.prototype, 'contentDocument', {
+        configurable:true, get:function(){var d=frameDocDesc.get.call(this);if(d)installRealm(d.defaultView);return d;}
+      });
+    }
+    var watchFrames = new MutationObserver(function(){
+      document.querySelectorAll('iframe').forEach(function(f){
+        try { installRealm(frameWinDesc ? frameWinDesc.get.call(f) : f.contentWindow); }catch(_){}
+      });
+    });
+    watchFrames.observe(document.documentElement,{childList:true,subtree:true});
+
+    var nativeFetch = window.fetch;
+    window.fetch = async function (input, init) {
+      var urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+      if (urlStr && urlStr.indexOf('blob:') !== 0 && urlStr.indexOf('data:') !== 0) {
+        var blob = findFileBlob(urlStr);
+        if (blob) {
+          return new Response(blob, {
+            status: 200,
+            headers: { 'Content-Type': blob.type || 'application/octet-stream', 'Content-Length': String(blob.size) }
+          });
+        }
+      }
+      return nativeFetch.apply(this, arguments);
+    };
+
+    var nativeXhrOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (method, url) {
+      if (typeof url === 'string' && url.indexOf('blob:') !== 0 && url.indexOf('data:') !== 0) {
+        var blob = findFileBlob(url);
+        if (blob) {
+          var args = Array.prototype.slice.call(arguments);
+          args[1] = URL.createObjectURL(blob);
+          return nativeXhrOpen.apply(this, args);
+        }
+      }
+      return nativeXhrOpen.apply(this, arguments);
+    };
+
+    var scriptSrcDesc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+    Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+      get: function () { return this.__overrideSrc || scriptSrcDesc.get.call(this); },
+      set: function (v) {
+        if (typeof v === 'string' && v.indexOf('blob:') !== 0 && v.indexOf('data:') !== 0) {
+          var blob = findFileBlob(v);
+          if (blob) {
+            scriptSrcDesc.set.call(this, URL.createObjectURL(new Blob([blob], { type: 'application/javascript' })));
+            return;
+          }
+        }
+        scriptSrcDesc.set.call(this, v);
+      },
+      configurable: true
+    });
+
+    var linkHrefDesc = Object.getOwnPropertyDescriptor(HTMLLinkElement.prototype, 'href');
+    if (linkHrefDesc && linkHrefDesc.set) {
+      Object.defineProperty(HTMLLinkElement.prototype, 'href', {
+        get: function () { return linkHrefDesc.get.call(this); },
+        set: function (v) {
+          if (typeof v === 'string' && v.indexOf('blob:') !== 0 && v.indexOf('data:') !== 0) {
+            var blob = findFileBlob(v);
+            if (blob) { linkHrefDesc.set.call(this, URL.createObjectURL(new Blob([blob], { type: 'text/css' }))); return; }
+          }
+          linkHrefDesc.set.call(this, v);
+        },
+        configurable: true
+      });
+    }
+
+    var imgSrcDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    if (imgSrcDesc && imgSrcDesc.set) {
+      Object.defineProperty(HTMLImageElement.prototype, 'src', {
+        get: function () { return this.__pianoLogicalSrc || imgSrcDesc.get.call(this); },
+        set: function (v) { this.__pianoLogicalSrc = String(v); return imgSrcDesc.set.call(this, resolveAsset(v)); },
+        configurable: true
+      });
+    }
+
+    ['backgroundImage', 'background', 'cssText', 'borderImageSource', 'listStyleImage'].forEach(function(prop) {
+      var desc = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, prop);
+      if (!desc || !desc.set) return;
+      try {
+        Object.defineProperty(CSSStyleDeclaration.prototype, prop, {
+          get: function() { return desc.get.call(this); },
+          set: function(v) { return desc.set.call(this, rewriteCss(v)); },
+          configurable: true
+        });
+      } catch (_) {}
+    });
+    var nativeCssSet = CSSStyleDeclaration.prototype.setProperty;
+    CSSStyleDeclaration.prototype.setProperty = function(name, value, priority) {
+      return nativeCssSet.call(this, name, rewriteCss(value), priority);
+    };
+
+    for (var ci = 0; ci < 2; ci++) {
+      var Ctor = [HTMLMediaElement, HTMLSourceElement][ci];
+      if (!Ctor) continue;
+      var desc = Object.getOwnPropertyDescriptor(Ctor.prototype, 'src');
+      if (!desc || !desc.set) continue;
+      (function (proto, descriptor) {
+        Object.defineProperty(proto, 'src', {
+          get: function () { return descriptor.get.call(this); },
+          set: function (v) {
+            if (typeof v === 'string' && v.indexOf('blob:') !== 0 && v.indexOf('data:') !== 0) {
+              var blob = findFileBlob(v);
+              if (blob) { descriptor.set.call(this, URL.createObjectURL(blob)); return; }
+            }
+            descriptor.set.call(this, v);
+          },
+          configurable: true
+        });
+      })(Ctor.prototype, desc);
+    }
+
+    var nativeSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+      if (name && typeof value === 'string' && value.indexOf('blob:') !== 0 && value.indexOf('data:') !== 0) {
+        var ln = String(name).toLowerCase();
+        if (ln === 'src' || ln === 'href' || ln === 'poster') {
+          var blob = findFileBlob(value);
+          if (blob) value = assetUrl(blob);
+        }
+      }
+      if (String(name).toLowerCase() === 'style' && typeof value === 'string') value = rewriteCss(value);
+      return nativeSetAttribute.call(this, name, value);
+    };
+
+    var NativeWorker = window.Worker;
+    window.Worker = function (url, options) {
+      var urlStr = (url && typeof url.href === 'string') ? url.href : String(url);
+      if (urlStr && urlStr.indexOf('blob:') !== 0) {
+        var blob = findFileBlob(urlStr);
+        if (blob) url = URL.createObjectURL(new Blob([blob], { type: 'application/javascript' }));
+      }
+      return new NativeWorker(url, options);
+    };
+    window.Worker.prototype = NativeWorker.prototype;
+
+    var nativeWrite = document.write.bind(document);
+    document.write = function (html) {
+      if (typeof html !== 'string') { try { nativeWrite(html); } catch (e) {} return; }
+
+      var scriptRe = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+      var m, matched = false;
+
+      while ((m = scriptRe.exec(html))) {
+        matched = true;
+        var attrs = m[1];
+        var body = m[2];
+        var srcMatch = attrs.match(/\bsrc\s*=\s*["']([^"']+)["']/i);
+
+        if (srcMatch) {
+          var src = srcMatch[1];
+          var base = src.split('?')[0].split('#')[0].split('/').pop().toLowerCase();
+          var preText = permTextMap.get(base);
+          if (preText) {
+            var s = document.createElement('script');
+            s.text = preText;
+            document.head.appendChild(s);
+            continue;
+          }
+          var blob = findFileBlob(src);
+          var s2 = document.createElement('script');
+          s2.async = false;
+          s2.src = blob ? URL.createObjectURL(new Blob([blob], { type: 'application/javascript' })) : src;
+          document.head.appendChild(s2);
+        } else if (body && body.trim()) {
+          var s3 = document.createElement('script');
+          s3.text = body;
+          document.head.appendChild(s3);
+        }
+      }
+
+      var linkRe = /<link\b([^>]*)>/gi;
+      while ((m = linkRe.exec(html))) {
+        matched = true;
+        var lattrs = m[1];
+        var hrefMatch = lattrs.match(/\bhref\s*=\s*["']([^"']+)["']/i);
+        if (hrefMatch) {
+          var href = hrefMatch[1];
+          var relMatch = lattrs.match(/\brel\s*=\s*["']([^"']+)["']/i);
+          var l = document.createElement('link');
+          l.rel = relMatch ? relMatch[1] : 'stylesheet';
+          var lb = findFileBlob(href);
+          l.href = lb ? URL.createObjectURL(new Blob([lb], { type: 'text/css' })) : href;
+          document.head.appendChild(l);
+        }
+      }
+    };
+    document.writeln = function (html) { document.write(String(html) + '\n'); };
+
+    try {
+      var cssBlob = findFileBlob('styles.css');
+      if (cssBlob) {
+        var cssText = await cssBlob.text();
+        cssText = cssText.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, function (mm, q, u) {
+          if (u.indexOf('data:') === 0 || u.indexOf('blob:') === 0 || /^https?:\/\//i.test(u)) return mm;
+          var b = findFileBlob(u);
+          return b ? 'url("' + URL.createObjectURL(b) + '")' : mm;
+        });
+        var styleEl = document.createElement('style');
+        styleEl.textContent = cssText;
+        document.head.appendChild(styleEl);
+      }
+    } catch (e) { console.warn('[loader] styles.css inline failed', e); }
+
+    setStatus('Starting game…');
+
+    console.info('[Piano Play] ZIP assets indexed:', fileMap.size);
+    var bootBlob = findFileBlob('html/html.nocache.js');
+    if (!bootBlob) throw new Error('html/html.nocache.js not found in ZIP');
+    var bootText = await bootBlob.text();
+    var bootUrl = URL.createObjectURL(new Blob([bootText], { type: 'application/javascript' }));
+    var bootScript = document.createElement('script');
+    bootScript.__overrideSrc = 'http://127.0.0.1/html/html.nocache.js';
+    scriptSrcDesc.set.call(bootScript, bootUrl);
+    document.head.appendChild(bootScript);
+
+    setProgress(0.9);
+
+    var embed = document.getElementById('embed-html');
+    var hidden = false;
+    function tryHide() {
+      if (hidden) return true;
+      var hasCanvas = !!document.querySelector('#embed-html canvas');
+      var hasContent = embed && !!embed.querySelector('canvas');
+      if (hasCanvas || hasContent) {
+        hidden = true;
+        setProgress(1);
+        setStatus('Ready');
+        setTimeout(hideLoader, 400);
+        return true;
+      }
+      return false;
+    }
+    if (!tryHide()) {
+      var obs = new MutationObserver(function () { if (tryHide()) obs.disconnect(); });
+      obs.observe(document.body, { childList: true, subtree: true });
+      setTimeout(function () { obs.disconnect(); if (!hidden) setStatus('Game did not initialize. Check the console and ZIP contents.'); }, 25000);
+    }
+
+  } catch (err) {
+    console.error(err);
+    setStatus('Error: ' + (err && err.message ? err.message : String(err)));
+  }
+})();
+</script>
+</body>
+</html>
