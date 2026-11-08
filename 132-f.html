@@ -92,7 +92,10 @@
                     splashScreenStyle: "Dark",
                     backgroundColor: "#000000"
                 }
-                let blob = new Blob([JS.createObjectURL(blob);
+                let blob = new Blob([JSON.stringify(json)], {
+                    type: 'application/json'
+                });
+                let blobUrl = URL.createObjectURL(blob);
                 UnityLoader.instantiate("gameContainer", json, {
                     onProgress: UnityProgress,
                     url: blobUrl
