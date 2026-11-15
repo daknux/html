@@ -1,38 +1,57 @@
-<!-- shxyder -->
 <!DOCTYPE html>
 <html lang="en-us">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-  <title class="cloak">Pixel Gun Survival | MacVG</title>
-  <span id="macvgmacvg" name="game173"></span>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pixel Gun Survival | MacVG</title>
   <link class="favicon" rel="shortcut icon" href="https://cdn.jsdelivr.net/gh/fnafben/1234188746455876655@main/logo.png" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fnafben/1234188746455876655@main/TemplateData/style.css" />
   <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background: #000;
-  }
-  #unity-container.unity-desktop {
-    position: fixed;
-    inset: 0;
-    width: 100vw;
-    height: 100vh;
-  }
-  #unity-canvas {
-    display: block;
-    width: 100vw !important;
-    height: 100vh !important;
-  }
-</style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+    #unity-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+    #unity-canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    #unity-loading-bar {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+    }
+    #unity-mobile-warning {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      z-index: 10;
+      display: none;
+    }
+  </style>
 </head>
 <body>
-  <div id="unity-container" class="unity-desktop">
-    <canvas id="unity-canvas" width="100%" height="100%"></canvas>
+  <div id="unity-container">
+    <canvas id="unity-canvas"></canvas>
     <div id="unity-loading-bar">
       <div id="unity-logo"></div>
       <div id="unity-progress-bar-empty">
@@ -64,6 +83,15 @@
     var fullscreenButton = document.querySelector("#unity-fullscreen-button");
     var mobileWarning = document.querySelector("#unity-mobile-warning");
 
+    // Sets both the display size and the drawing resolution to the window size,
+    // so the game fills the screen without being stretched or cropped.
+    function resizeCanvas() {
+      canvas.style.width = window.innerWidth + "px";
+      canvas.style.height = window.innerHeight + "px";
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
     if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
       container.className = "unity-mobile";
       config.devicePixelRatio = 1;
@@ -71,15 +99,15 @@
       setTimeout(() => {
         mobileWarning.style.display = "none";
       }, 5000);
-  } else {
-  canvas.style.width = "100vw";
-  canvas.style.height = "100vh";
-}
+    }
+
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
 
     canvas.style.background = "url('https://cdn.jsdelivr.net/gh/organization-schoogls/y@main/background.gif') center / cover";
     loadingBar.style.display = "block";
 
-    // Dosya birleştirme fonksiyonu
+    // Merges the data file parts into one file
     async function mergeDataParts() {
       const partFiles = [
         buildUrl + "/Shooting.data.unityweb.part001",
@@ -89,11 +117,11 @@
 
       const blobs = [];
 
-      // Parçaları sırayla indir
+      // Download the parts in order
       for (const part of partFiles) {
         try {
           const response = await fetch(part);
-          if (!response.ok) throw new Error(`Parça yüklenemedi: ${part}`);
+          if (!response.ok) throw new Error("Part failed to load: " + part);
           const blob = await response.blob();
           blobs.push(blob);
         } catch (error) {
@@ -102,16 +130,16 @@
         }
       }
 
-      // Parçaları birleştir
+      // Combine the parts
       const mergedBlob = new Blob(blobs, { type: "application/octet-stream" });
       const mergedUrl = URL.createObjectURL(mergedBlob);
       return mergedUrl;
     }
 
-    // Unity yüklemesini başlat
+    // Start loading Unity
     mergeDataParts().then((mergedDataUrl) => {
       if (mergedDataUrl) {
-        config.dataUrl = mergedDataUrl; // Birleştirilmiş dosya URL'sini kullan
+        config.dataUrl = mergedDataUrl;
         var script = document.createElement("script");
         script.src = loaderUrl;
         script.onload = () => {
@@ -127,12 +155,12 @@
             }
           })
           .catch((message) => {
-            console.error("Unity yükleme hatası:", message);
+            console.error("Unity loading error:", message);
           });
         };
         document.body.appendChild(script);
       } else {
-        console.error("Dosya birleştirme başarısız, Unity yüklenemiyor.");
+        console.error("File merge failed, Unity cannot load.");
       }
     });
   </script>
