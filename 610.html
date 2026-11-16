@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<body style="margin:0;background:#09090d;color:white">
+Loading chapters…
+<script>
+window.MOD_CAMPAIGN_BASE="https://cdn.jsdelivr.net/gh/sektanaymikon/familyrune-web-a@015161084ac571f7d5a2c3bbd40fbef189b46b6c/";
+fetch(window.MOD_CAMPAIGN_BASE+"campaign.html")
+.then(r=>{if(!r.ok)throw Error("HTTP "+r.status);return r.text();})
+.then(html=>{document.open();document.write(html);document.close();})
+.catch(e=>document.body.textContent="Unable to load: "+e.message);
+</script>
+</body>
