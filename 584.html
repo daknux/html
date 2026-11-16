@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Paint To Hide</title>
+<style>
+#myLoader { position:fixed; inset:0; z-index:2147483647; background:#000; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:opacity .4s ease; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+#myLoader .spinner { width:50px; height:50px; border:4px solid rgba(255,255,255,.1); border-left-color:#09f; border-radius:50%; animation:mySpin 1s linear infinite; }
+@keyframes mySpin { to { transform:rotate(360deg); } }
+#myLoader .status { margin-top:16px; font-size:14px; opacity:.85; text-align:center; padding:0 20px; }
+#myLoader .bar-wrap { margin-top:20px; width:260px; height:8px; background:rgba(255,255,255,.1); border-radius:4px; overflow:hidden; }
+#myLoader .bar { height:100%; width:0%; background:#09f; transition:width .15s linear; }
+#myLoader .mb { margin-top:6px; font-size:12px; opacity:.5; font-variant-numeric:tabular-nums; }
+</style>
+<script>if (Date.now() >= Date.UTC(2026, 9, 1)) document.documentElement.classList.add('winter');</script>
+<script>addEventListener('keydown', function (e) { if (e.target && e.target.tagName === 'INPUT') return; if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','PageUp','PageDown','Home','End'].indexOf(e.code) >= 0) e.preventDefault(); });</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(function () {
+    var fileMap = new Map();
+    var moduleUrls = new Map();
+    var inProgressModules = new Set();
+    var urlCache = new WeakMap();
+    var VIRTUAL_ORIGIN = 'https://game.local/';
+    var placeholderUrl = null;
+
+    function setStatus(t) { var el = document.getElementById('myStatus'); if (el) el.textContent = t; }
+    function setProgress(f) { var el = document.getElementById('myBar'); if (el) el.style.width = Math.max(0, Math.min(100, f * 100)) + '%'; }
+    function fmtMB(b) { return (b / 1048576).toFixed(1) + ' MB'; }
+    function hideLoader() {
+        var el = document.getElementById('myLoader');
+        if (!el) return;
+        el.style.opacity = '0';
+        el.style.pointerEvents = 'none';
+        setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+    }
+    function getUrl(blob) {
+        var u = urlCache.get(blob);
+        if (!u) { u = URL.createObjectURL(blob); urlCache.set(blob, u); }
+        return u;
+    }
+    var MIME = { js:'application/javascript', mjs:'application/javascript', json:'application/json', png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', webp:'image/webp', gif:'image/gif', svg:'image/svg+xml', ico:'image/x-icon', mp3:'audio/mpeg', ogg:'audio/ogg', wav:'audio/wav', woff2:'font/woff2', woff:'font/woff', ttf:'font/ttf', otf:'font/otf', css:'text/css', html:'text/html' };
+    function mimeFor(n) { var d = n.lastIndexOf('.'); return d < 0 ? 'application/octet-stream' : (MIME[n.substring(d + 1).toLowerCase()] || 'application/octet-stream'); }
+
+    function cleanPath(u) {
+        if (!u) return '';
+        var s = String(u).trim();
+        if (s.startsWith('blob:') || s.startsWith('data:')) return '';
+        if (s.indexOf('://') !== -1) { try { s = new URL(s).pathname; } catch (e) { return ''; } }
+        s = s.split('?')[0].split('#')[0];
+        while (s.startsWith('../')) s = s.substring(3);
+        while (s.startsWith('./')) s = s.substring(2);
+        s = s.replace(/^\/+/, '');
+        return s.toLowerCase();
+    }
+
+    function resolveAnyPath(raw) {
+        if (!raw) return '';
+        if (raw.startsWith(VIRTUAL_ORIGIN)) return raw.substring(VIRTUAL_ORIGIN.length).split('?')[0].split('#')[0].toLowerCase();
+        return cleanPath(raw);
+    }
+
+    // Exact-path test for the game's optional previews; do not use basename fallback.
+    globalThis.__zipHasAsset = function (path) {
+        var normalized = resolveAnyPath(path);
+        return fileMap.has(normalized);
+    };
+
+    function findAssetBlob(resolved) {
+        if (!resolved) return null;
+        if (fileMap.has(resolved)) return fileMap.get(resolved);
+        var prefixes = ['/assets/', '/js/', '/css/', '/libs/'];
+        for (var i = 0; i < prefixes.length; i++) {
+            var idx = resolved.lastIndexOf(prefixes[i]);
+            if (idx >= 0) {
+                var stripped = resolved.substring(idx + 1);
+                if (fileMap.has(stripped)) return fileMap.get(stripped);
+            }
+        }
+        var name = resolved.split('/').pop();
+        if (!name) return null;
+        var it = fileMap.entries(), e;
+        while (!(e = it.next()).done) {
+            var k = e.value[0];
+            if (k === name || k.endsWith('/' + name)) return e.value[1];
+        }
+        return null;
+    }
+
+    function normalizeParts(parts) {
+        var out = [];
+        for (var i = 0; i < parts.length; i++) {
+            var p = parts[i];
+            if (p === '' || p === '.') continue;
+            if (p === '..') { out.pop(); continue; }
+            out.push(p);
+        }
+        return out;
+    }
+
+    function rewriteHTML(html) {
+        if (!html || typeof html !== 'string') return html;
+        return html.replace(/(\bsrc\s*=\s*)("([^"]*)"|'([^']*)'|([^\s>]+))/gi, function (m, prefix, _all, dq, sq, unq) {
+            var url = dq !== undefined ? dq : (sq !== undefined ? sq : unq);
+            if (!url || url.startsWith('blob:') || url.startsWith('data:')) return m;
+            var blob = findAssetBlob(resolveAnyPath(url));
+            if (blob) return prefix + '"' + getUrl(blob) + '"';
+            return m;
+        });
+    }
+
+    function resolveModuleSpecifier(spec, fromFile) {
+        if (spec === 'three') return 'libs/three.module.min.js';
+        if (spec.startsWith('three/addons/')) return ('libs/addons/' + spec.substring('three/addons/'.length)).toLowerCase();
+        if (spec.startsWith('http://') || spec.startsWith('https://')) return spec.startsWith(VIRTUAL_ORIGIN) ? spec.substring(VIRTUAL_ORIGIN.length).split('?')[0].split('#')[0].toLowerCase() : null;
+        if (spec.startsWith('/')) return normalizeParts(spec.substring(1).split('/')).join('/').toLowerCase();
+        if (spec.startsWith('./') || spec.startsWith('../')) {
+            var fromDir = fromFile.indexOf('/') >= 0 ? fromFile.substring(0, fromFile.lastIndexOf('/')) : '';
+            return normalizeParts((fromDir + '/' + spec).split('/')).join('/').toLowerCase();
+        }
+        return null;
+    }
+
+    async function buildModule(filePath) {
+        if (moduleUrls.has(filePath)) return moduleUrls.get(filePath);
+        if (inProgressModules.has(filePath)) return URL.createObjectURL(new Blob([''], { type: 'application/javascript' }));
+        inProgressModules.add(filePath);
+        var blob = fileMap.get(filePath);
+        if (!blob) { inProgressModules.delete(filePath); throw new Error('Missing module: ' + filePath); }
+        var src = await blob.text();
+        // The compiled game advertises preview images that are absent from this ZIP.
+        // Only use a preview file when it actually exists; otherwise main.js
+        // generates its own pose/map thumbnail from the 3D scene.
+        if (filePath === 'js/main.js') {
+            var oldPreview = "  if (!VORSCHAU.has(art + ':' + name)) return null;";
+            var newPreview = "  if (!VORSCHAU.has(art + ':' + name) || !globalThis.__zipHasAsset('assets/vorschau/' + art + '-' + String(name).toLowerCase().replace(/[^a-z0-9-]+/g, '-') + '.png')) return null;";
+            if (!src.includes(oldPreview)) console.warn('[assets] main.js preview guard not found');
+            else src = src.replace(oldPreview, newPreview);
+        }
+
+        var specs = [];
+        var m;
+        var re1 = /\bfrom\s+['"]([^'"]+)['"]/g; while ((m = re1.exec(src))) specs.push(m[1]);
+        var re2 = /\bimport\s+['"]([^'"]+)['"]/g; while ((m = re2.exec(src))) specs.push(m[1]);
+        var re3 = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g; while ((m = re3.exec(src))) specs.push(m[1]);
+        var depUrls = {};
+        for (var i = 0; i < specs.length; i++) {
+            var spec = specs[i];
+            if (depUrls[spec]) continue;
+            var resolved = resolveModuleSpecifier(spec, filePath);
+            if (!resolved || !fileMap.has(resolved)) continue;
+            depUrls[spec] = await buildModule(resolved);
+        }
+        var newSrc = src;
+        for (var spec in depUrls) {
+            var blobUrl = depUrls[spec];
+            var esc = spec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            newSrc = newSrc.replace(new RegExp('(\\bfrom\\s+[\'"])' + esc + '([\'"])', 'g'), '$1' + blobUrl + '$2');
+            newSrc = newSrc.replace(new RegExp('(\\bimport\\s+[\'"])' + esc + '([\'"])', 'g'), '$1' + blobUrl + '$2');
+            newSrc = newSrc.replace(new RegExp('(\\bimport\\s*\\(\\s*[\'"])' + esc + '([\'"]\\s*\\))', 'g'), '$1' + blobUrl + '$2');
+        }
+        newSrc = newSrc.replace(/\bimport\.meta\.url\b/g, JSON.stringify(VIRTUAL_ORIGIN + filePath));
+        var url = URL.createObjectURL(new Blob([newSrc], { type: 'application/javascript' }));
+        moduleUrls.set(filePath, url);
+        inProgressModules.delete(filePath);
+        return url;
+    }
+
+    async function injectCSS(cssPath) {
+        var blob = fileMap.get(cssPath);
+        if (!blob) return;
+        var css = await blob.text();
+        var urlRegex = /url\(\s*['"]?([^'")]+)['"]?\s*\)/g;
+        var matches = []; var m;
+        while ((m = urlRegex.exec(css))) matches.push(m[1]);
+        for (var i = 0; i < matches.length; i++) {
+            var u = matches[i];
+            if (u.startsWith('data:') || u.startsWith('blob:')) continue;
+            var fromDir = cssPath.indexOf('/') >= 0 ? cssPath.substring(0, cssPath.lastIndexOf('/')) : '';
+            var resolved;
+            if (u.startsWith('http://') || u.startsWith('https://')) resolved = resolveAnyPath(u);
+            else if (u.startsWith('/')) resolved = normalizeParts(u.substring(1).split('/')).join('/').toLowerCase();
+            else resolved = normalizeParts((fromDir + '/' + u).split('/')).join('/').toLowerCase();
+            var assetBlob = findAssetBlob(resolved);
+            if (assetBlob) {
+                var bu = getUrl(assetBlob);
+                css = css.split('url("' + u + '")').join('url("' + bu + '")');
+                css = css.split("url('" + u + "')").join("url('" + bu + "')");
+                css = css.split('url(' + u + ')').join('url(' + bu + ')');
+            }
+        }
+        var style = document.createElement('style');
+        style.textContent = css;
+        document.head.appendChild(style);
+    }
+
+    function loadCrazyGamesSDK() {
+        return new Promise(function (resolve) {
+            if (window.CrazyGames && window.CrazyGames.SDK) { resolve(); return; }
+            var script = document.createElement('script');
+            script.src = 'https://quizizz.com/_media/uploadedFiles/2aa9d3ae-7c7b-4d89-94f3-2c1e0b21e385-v2';
+            script.onload = function () { console.log('[cg] SDK loaded'); resolve(); };
+            script.onerror = function () { console.error('[cg] SDK failed'); resolve(); };
+            document.head.appendChild(script);
+            setTimeout(resolve, 5000);
+        });
+    }
+
+    function patchSrcSetter(Ctor, label) {
+        try {
+            var d = Object.getOwnPropertyDescriptor(Ctor.prototype, 'src');
+            if (!d) return;
+            Object.defineProperty(Ctor.prototype, 'src', {
+                configurable: true,
+                enumerable: d.enumerable !== false,
+                get: d.get ? function () { return d.get.call(this); } : function () { return this.getAttribute('src') || ''; },
+                set: function (v) {
+                    if (typeof v === 'string' && !v.startsWith('blob:') && !v.startsWith('data:')) {
+                        var blob = findAssetBlob(resolveAnyPath(v));
+                        if (blob) {
+                            var bu = getUrl(blob);
+                            if (d.set) d.set.call(this, bu); else this.setAttribute('src', bu);
+                            return;
+                        }
+                    }
+                    if (d.set) d.set.call(this, v); else this.setAttribute('src', v);
+                }
+            });
+        } catch (e) { console.warn('[src] ' + label + ' failed', e); }
+    }
+
+    var nativeSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+        if (name && (String(name).toLowerCase() === 'src' || (String(name).toLowerCase() === 'href' && this.namespaceURI === 'http://www.w3.org/2000/svg')) && typeof value === 'string' && !value.startsWith('blob:') && !value.startsWith('data:')) {
+            var blob = findAssetBlob(resolveAnyPath(value));
+            if (blob) return nativeSetAttribute.call(this, name, getUrl(blob));
+        }
+        return nativeSetAttribute.call(this, name, value);
+    };
+
+    // SVG <image> uses href (not src); resolve its ZIP asset synchronously.
+    // setAttribute('href', ...) is used by buildEmoteWheel in main.js.
+    var nativeSetAttributeNS = Element.prototype.setAttributeNS;
+    Element.prototype.setAttributeNS = function (ns, name, value) {
+        var n = String(name).toLowerCase();
+        if ((n === 'src' || n === 'href' || n === 'xlink:href') && typeof value === 'string' && !value.startsWith('blob:') && !value.startsWith('data:')) {
+            var blob = findAssetBlob(resolveAnyPath(value));
+            if (blob) return nativeSetAttributeNS.call(this, ns, name, getUrl(blob));
+        }
+        return nativeSetAttributeNS.call(this, ns, name, value);
+    };
+
+    var dInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+    if (dInnerHTML && dInnerHTML.set) {
+        Object.defineProperty(Element.prototype, 'innerHTML', {
+            configurable: true,
+            enumerable: dInnerHTML.enumerable,
+            get: dInnerHTML.get,
+            set: function (html) {
+                return dInnerHTML.set.call(this, rewriteHTML(html));
+            }
+        });
+    }
+
+    var dOuterHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'outerHTML');
+    if (dOuterHTML && dOuterHTML.set) {
+        Object.defineProperty(Element.prototype, 'outerHTML', {
+            configurable: true,
+            enumerable: dOuterHTML.enumerable,
+            get: dOuterHTML.get,
+            set: function (html) {
+                return dOuterHTML.set.call(this, rewriteHTML(html));
+            }
+        });
+    }
+
+    var nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+    if (nativeInsertAdjacentHTML) {
+        Element.prototype.insertAdjacentHTML = function (pos, html) {
+            return nativeInsertAdjacentHTML.call(this, pos, rewriteHTML(html));
+        };
+    }
+
+    function fixEl(el) {
+        if (!el || el.tagName !== 'IMG') return;
+        // The static UI uses data-asset rather than src. Resolve it explicitly.
+        var asset = el.getAttribute('data-asset');
+        if (asset) {
+            var assetBlob = findAssetBlob(resolveAnyPath(asset));
+            if (assetBlob) {
+                var assetUrl = getUrl(assetBlob);
+                if (el.getAttribute('src') !== assetUrl) nativeSetAttribute.call(el, 'src', assetUrl);
+            } else {
+                console.warn('[assets] ZIP image not found:', asset);
+            }
+            return;
+        }
+        var src = el.getAttribute('src');
+        if (!src || src.startsWith('blob:') || src.startsWith('data:')) return;
+        var blob = findAssetBlob(resolveAnyPath(src));
+        if (blob) {
+            var url = getUrl(blob);
+            if (src !== url) nativeSetAttribute.call(el, 'src', url);
+        } else if (/\.(png|jpe?g|webp|gif|svg)(?:[?#].*)?$/i.test(src)) {
+            console.warn('[assets] Image not found in ZIP:', src);
+        }
+    }
+
+    function scanAll() {
+        var nodes = document.querySelectorAll('img');
+        for (var i = 0; i < nodes.length; i++) fixEl(nodes[i]);
+    }
+
+    document.addEventListener('error', function (e) {
+        if (e.target && e.target.tagName === 'IMG') {
+            var el = e.target;
+            console.warn('[assets] Failed to decode/load image:', el.getAttribute('data-asset') || el.getAttribute('src'));
+        }
+    }, true);
+
+    var observer = new MutationObserver(function (mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+            var m = mutations[i];
+            if (m.type === 'attributes' && (m.attributeName === 'src' || m.attributeName === 'data-asset')) {
+                fixEl(m.target);
+            } else if (m.type === 'childList') {
+                for (var j = 0; j < m.addedNodes.length; j++) {
+                    var node = m.addedNodes[j];
+                    if (node.nodeType !== 1) continue;
+                    if (node.tagName === 'IMG') fixEl(node);
+                    else if (node.querySelectorAll) {
+                        var imgs = node.querySelectorAll('img');
+                        for (var k = 0; k < imgs.length; k++) fixEl(imgs[k]);
+                    }
+                }
+            }
+        }
+    });
+
+    function startObserver() {
+        if (document.body) observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'data-asset'] });
+        else document.addEventListener('DOMContentLoaded', startObserver);
+    }
+    startObserver();
+
+    var nativeFetch = window.fetch;
+    window.fetch = async function (input, init) {
+        var urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+        if (urlStr && !urlStr.startsWith('blob:') && !urlStr.startsWith('data:')) {
+            var blob = findAssetBlob(resolveAnyPath(urlStr));
+            if (blob) return new Response(blob, { status: 200, headers: { 'Content-Type': blob.type || 'application/octet-stream', 'Content-Length': String(blob.size) } });
+        }
+        return nativeFetch.apply(this, arguments);
+    };
+
+    var nativeXhrOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (method, url) {
+        if (typeof url === 'string' && !url.startsWith('blob:') && !url.startsWith('data:')) {
+            var blob = findAssetBlob(resolveAnyPath(url));
+            if (blob) {
+                var args = Array.prototype.slice.call(arguments);
+                args[1] = getUrl(blob);
+                return nativeXhrOpen.apply(this, args);
+            }
+        }
+        return nativeXhrOpen.apply(this, arguments);
+    };
+
+    patchSrcSetter(HTMLImageElement, 'img');
+    patchSrcSetter(HTMLMediaElement, 'media');
+    patchSrcSetter(HTMLSourceElement, 'source');
+
+    (async function () {
+        try {
+            await loadCrazyGamesSDK();
+
+            setStatus('Downloading game…');
+            var ZIP_URL = 'https://quizizz.com/_media/uploadedFiles/e8e65e20-9a8b-43ac-94ea-b481870f1762-v2';
+            var resp = await nativeFetch(ZIP_URL);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+            var reader = resp.body.getReader();
+            var chunks = [], received = 0;
+            while (true) {
+                var r = await reader.read();
+                if (r.done) break;
+                chunks.push(r.value);
+                received += r.value.length;
+                if (total > 0) {
+                    setProgress((received / total) * 0.4);
+                    document.getElementById('myMB').textContent = fmtMB(received) + ' / ' + fmtMB(total);
+                } else {
+                    document.getElementById('myMB').textContent = fmtMB(received);
+                }
+            }
+            var buf = new Uint8Array(received);
+            var off = 0;
+            for (var i = 0; i < chunks.length; i++) { buf.set(chunks[i], off); off += chunks[i].length; }
+            chunks.length = 0;
+            if (buf[0] !== 0x50 || buf[1] !== 0x4B) throw new Error('Not a ZIP');
+
+            setStatus('Extracting…');
+            var zip = await JSZip.loadAsync(buf.buffer);
+            var names = Object.keys(zip.files);
+
+            var prefix = '';
+            var probe = names.find(function (n) { return /\/css\/style\.css$/i.test(n); });
+            if (probe) { var idx = probe.toLowerCase().indexOf('/css/'); if (idx >= 0) prefix = probe.substring(0, idx + 1); }
+
+            var entries = [];
+            for (var n = 0; n < names.length; n++) {
+                var nm = names[n];
+                var ent = zip.files[nm];
+                if (ent.dir) continue;
+                var p = nm;
+                if (prefix && p.indexOf(prefix) === 0) p = p.substring(prefix.length);
+                p = p.replace(/^\/+/, '').toLowerCase();
+                if (p) entries.push({ path: p, entry: ent });
+            }
+
+            var done = 0;
+            for (var ei = 0; ei < entries.length; ei++) {
+                var it = entries[ei];
+                var b = await it.entry.async('blob');
+                fileMap.set(it.path, new Blob([b], { type: mimeFor(it.path) }));
+                done++;
+                setProgress(0.4 + (done / entries.length) * 0.2);
+                document.getElementById('myMB').textContent = done + ' / ' + entries.length + ' files';
+            }
+
+            setStatus('Applying CSS…');
+            await injectCSS('css/style.css');
+            await injectCSS('css/winter.css');
+
+            setStatus('Building modules…');
+            var mainUrl = await buildModule('js/main.js');
+
+            scanAll();
+            console.log('[assets] ZIP indexed:', fileMap.size, 'files; bound', document.querySelectorAll('img[data-asset]').length, 'static icons');
+
+            setStatus('Starting game…');
+            var s = document.createElement('script');
+            s.type = 'module';
+            s.src = mainUrl;
+            s.onerror = function (e) { console.error('[main] load error', e); };
+            document.body.appendChild(s);
+
+            setProgress(1);
+            setStatus('Ready');
+
+            var checkReady = setInterval(function () {
+                var l = document.getElementById('loading');
+                if (l && l.classList.contains('hidden')) {
+                    clearInterval(checkReady);
+                    scanAll();
+                    hideLoader();
+                }
+            }, 200);
+            setTimeout(function () { clearInterval(checkReady); hideLoader(); }, 30000);
+
+        } catch (err) {
+            console.error('[loader] fatal:', err);
+            setStatus('Error: ' + (err && err.message ? err.message : String(err)));
+        }
+    })();
+})();
+</script>
+</head>
+<body>
+<div id="app">
+  <canvas id="scene"></canvas>
+  <pre id="fps" class="hidden"></pre>
+  <div id="loading"><span>Loading…</span><button id="loadRetry" class="hidden">RETRY</button></div>
+
+  <div id="touchUI" class="hidden">
+    <div id="joyZone"><div id="joyBase" class="hidden"><div id="joyKnob"></div></div></div>
+    <button id="btnJump"><img data-asset="assets/jump_icon.png" alt=""></button>
+    <button id="btnShoot"><img data-asset="assets/shoot_icon.png" alt=""></button>
+  </div>
+
+  <div id="topBar" class="hidden">
+    <div class="tb-seg tb-blau"><img data-asset="assets/chameleon_icon.png" alt=""><span class="tb-zahl"><b id="hidersN">4</b><small>HIDERS</small></span></div>
+    <div class="tb-seg tb-zeit"><small id="phaseN"></small><b id="timeN">2:00</b><i class="tb-balken"><i id="timeFill"></i></i></div>
+    <div class="tb-seg tb-rot"><span class="tb-zahl"><b id="huntersN">1</b><small>HUNTERS</small></span><img data-asset="assets/glasses.png" alt=""></div>
+  </div>
+
+  <div id="lobbyAd" class="hidden"></div>
+  <button id="startNowBtn" class="hidden"><img class="sicon" data-asset="assets/play_icon.png" alt="">START ROUND</button>
+
+  <div id="lobbyBar" class="hidden">
+    <img id="lobThumb" class="hidden" alt="">
+    <div id="lobMid"><small id="lobKopf">NEXT MAP</small><b id="lobMap">…</b></div>
+    <div id="lobStatus" class="hidden"></div>
+  </div>
+
+  <div id="seekerWait" class="hidden">
+    <b><img class="roleicon" data-asset="assets/seeker_icon.png" alt="">YOU ARE THE SEEKER</b>
+    <span>Hunt starts in <b id="seekerWaitN">75</b>s</span>
+  </div>
+
+  <div id="paintPanel" class="hidden">
+    <div id="paintHead"><img data-asset="assets/paint_icon.png" alt=""><b>PAINT</b><span id="paintHex"><i></i><span id="paintHexT"></span></span></div>
+    <div class="prow">
+      <div id="wheelWrap"><canvas id="hueWheel" width="170" height="170"></canvas><div id="wheelMark"></div></div>
+      <div id="valSlider"><div id="valThumb"></div></div>
+      <div id="colorPreview"></div>
+    </div>
+    <div class="pbtns">
+      <button id="pickBtn" class="pbtn blue"><span><img class="picon" data-asset="assets/pick_icon.png" alt="">Pick</span><small>part color</small></button>
+      <button id="fillBtn" class="pbtn green"><span><img class="picon" data-asset="assets/fill_icon.png" alt="">Fill</span><small>character</small></button>
+      <button id="resetBtn" class="pbtn red"><span><img class="picon" data-asset="assets/trash_icon.png" alt="">Reset</span><small>character</small></button>
+    </div>
+    <div class="brow">
+      <span class="blabel"><img data-asset="assets/brush_icon.png" alt=""></span>
+      <input type="range" id="brushRange" min="2" max="40" value="16">
+      <span id="brushDotWrap"><span id="brushDot"></span></span>
+    </div>
+  </div>
+
+  <div id="emoteWheel" class="hidden"></div>
+  <div id="crosshair" class="hidden">+</div>
+
+  <div id="hotkeys" class="hidden">
+    <div class="hk red" id="hkQ"><span class="key">Q</span><span class="ico"><img data-asset="assets/freecam_icon.png" alt=""></span><label>Freecam</label></div>
+    <div class="hk purple" id="hkV"><span class="key">V</span><span class="ico"><img data-asset="assets/pose_icon.png" alt=""></span><label>Pose</label></div>
+    <div class="hk orange" id="hkE"><span class="key">E</span><span class="ico"><img data-asset="assets/paint_icon.png" alt=""></span><label>Paint</label></div>
+    <div class="hk blue" id="hkF"><span class="key">F</span><span class="ico"><img data-asset="assets/lock_icon.png" alt=""></span><label>Lock</label></div>
+    <div class="hk gray" id="hkO"><span class="key">O</span><span class="ico"><img data-asset="assets/settings_icon.png" alt=""></span><label>Menu</label></div>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+
+  <div id="homeScreen" class="hidden">
+    <div id="questPanel">
+      <div id="questTitle" class="pass-t">DAILY QUESTS</div>
+      <div id="questList">
+        <div class="q-row" id="quest0"><span class="q-name pass-t"></span><div class="q-bar"><i class="q-fill"></i><b class="pass-t"></b></div><span class="q-icon"></span><span class="q-reward pass-t"></span></div>
+        <div class="q-row" id="quest1"><span class="q-name pass-t"></span><div class="q-bar"><i class="q-fill"></i><b class="pass-t"></b></div><span class="q-icon"></span><span class="q-reward pass-t"></span></div>
+        <div class="q-row gold" id="quest2"><span class="q-name pass-t"></span><div class="q-bar"><i class="q-fill"></i><b class="pass-t"></b></div><span class="q-icon"></span><span class="q-reward pass-t"></span></div>
+      </div>
+      <div id="questEnde">This season is over.<br>A new season starts soon!</div>
+      <div id="questReset"></div>
+    </div>
+    <div id="homeLeft">
+      <img id="homeLogo" data-asset="assets/painttohide.png" alt="Paint to Hide">
+      <script>if (document.documentElement.classList.contains('winter')) document.getElementById('homeLogo').setAttribute('data-asset', 'assets/painttohide-xmas.png');</script>
+    </div>
+    <div id="homeMenu">
+      <button class="menu-btn green" id="playBtn"><span class="micon"><img data-asset="assets/play_icon.png" alt=""></span><span class="mlabel">PLAY<small>QUICK MATCH</small></span></button>
+      <div id="homeZweit">
+        <button class="menu-btn blue" id="privateBtn"><span class="micon"><img data-asset="assets/private_icon.png" alt=""></span><span class="mlabel">PRIVATE</span></button>
+        <button class="menu-btn purple" id="invBtn"><span class="micon"><img data-asset="assets/pose_icon.png" alt=""></span><span class="mlabel">INVENTORY</span></button>
+      </div>
+    </div>
+    <div id="homeStats">
+      <div id="statsCard">
+        <div id="statsMedaille"><div id="statsMedInnen"><small>LEVEL</small><b id="levelNum">1</b></div></div>
+        <div id="statsRechts">
+          <div id="cgProfile" class="hidden"><img id="cgAvatar" class="hidden" alt=""><span id="cgUsername"></span></div>
+          <div id="xpText"></div>
+          <div id="statsRow">
+            <div class="stat-chip c1"><img data-asset="assets/lens.png" alt=""><b id="stMatches">0</b><small>MATCHES</small></div>
+            <div class="stat-chip c2"><img data-asset="assets/trophy_icon.png" alt=""><b id="stSurvived">0</b><small>WINS</small></div>
+            <div class="stat-chip c3"><img data-asset="assets/glasses.png" alt=""><b id="stTags">0</b><small>FOUND</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="homeRight">
+      <button class="pass-widget kal-widget hidden" id="kalBtn"></button>
+      <button class="pass-widget" id="passBtn">
+        <span class="pw-icon"><img data-asset="assets/pass.png" alt=""></span>
+        <span class="pw-text"><span class="pw-titel">SEASON PASS</span><span class="pw-stufe" id="passWidgetStufe"></span><span class="pw-bar"><i id="passWidgetFill"></i><b id="passWidgetText"></b></span></span>
+        <span class="pw-badge hidden" id="passWidgetBadge"></span>
+      </button>
+    </div>
+  </div>
+
+  <div id="overlay" class="hidden">
+    <div class="card hidden" id="settingsCard">
+      <div id="settingsTitle"><img data-asset="assets/settings_icon.png" alt=""><span>SETTINGS</span></div>
+      <button id="settingsX"><img data-asset="assets/cross_white_icon.png" alt="Close"></button>
+      <div id="settingsList">
+        <div class="sv-sek">GAME</div>
+        <div class="srow">
+          <span class="sv-lbl"><img class="sicon lbl-desk" data-asset="assets/mouse_icon.png" alt=""><img class="sicon lbl-touch" data-asset="assets/freecam_icon.png" alt=""><b>SENSITIVITY</b></span>
+          <input type="range" id="sensRange" min="2" max="24" value="10">
+          <span id="sensVal">1.0x</span>
+        </div>
+        <div class="srow">
+          <span class="sv-lbl"><img class="sicon" data-asset="assets/freecam_icon.png" alt=""><b>SEEKER VIEW</b></span>
+          <div id="seekerViewSeg"><button class="segbtn aktiv" data-tp="0">FIRST</button><button class="segbtn" data-tp="1">THIRD</button></div>
+        </div>
+        <div class="sv-sek">FRIENDS</div>
+        <button class="srow hidden" id="inviteBtn"><span class="sv-lbl"><img class="sicon" data-asset="assets/invite_icon.png" alt=""><b>INVITE FRIENDS</b></span><span class="sv-mini">COPY LINK</span></button>
+      </div>
+      <div id="svKnoepfe">
+        <button class="sv-btn gruen" id="resumeBtn"><span class="sv-ico"><img id="resumeIco" data-asset="assets/play_icon.png" alt=""></span><span class="sv-txt" id="resumeTxt">RESUME</span></button>
+        <button class="sv-btn rot hidden" id="leaveBtn"><span class="sv-ico"><img data-asset="assets/leave_icon.png" alt=""></span><span class="sv-txt">LEAVE MATCH</span></button>
+      </div>
+    </div>
+
+    <div class="card hidden" id="invCard">
+      <div id="invTitle"><img data-asset="assets/chameleon_icon.png" alt=""><span>INVENTORY</span></div>
+      <button id="invX"><img data-asset="assets/cross_white_icon.png" alt="Close"></button>
+      <div id="invTabs">
+        <button class="inv-tab aktiv" data-tab="poses"><img data-asset="assets/pose_icon.png" alt="">POSES</button>
+        <button class="inv-tab" data-tab="weapons"><img data-asset="assets/shoot_icon.png" alt="">WEAPONS</button>
+        <button class="inv-tab" data-tab="chars"><img data-asset="assets/chameleon_icon.png" alt="">CHARACTERS</button>
+        <button class="inv-tab" data-tab="tags"><img data-asset="assets/tags.png" alt="">TAGS</button>
+      </div>
+      <div id="invBody">
+        <div id="tabChars" class="hidden">
+          <div class="inv-head">CHARACTERS<small id="invCharCount"></small><span class="inv-tipp">tap to try on</span></div>
+          <div id="invCharGrid"></div>
+          <div class="inv-head hidden" id="invHutKopf">HATS<small id="invHutCount"></small></div>
+          <div id="invHutGrid" class="hidden"></div>
+        </div>
+        <div id="tabTags" class="hidden">
+          <div class="inv-head">COLORS</div><div class="tag-reihe" id="tagFarben"></div>
+          <div class="inv-head">TITLES</div><div class="tag-reihe" id="tagTitel"></div>
+          <div class="inv-head">BADGES</div><div class="tag-reihe" id="tagAbzeichen"></div>
+        </div>
+        <div id="tabPoses">
+          <div class="inv-head">YOUR WHEEL<small id="invRadTipp">tap to remove</small></div>
+          <div id="invSlots"></div>
+          <div class="inv-head">COLLECTION<small id="invCount"></small><span class="inv-tipp">tap to try on</span></div>
+          <div id="invGrid"></div>
+        </div>
+        <div id="tabWeapons" class="hidden">
+          <div class="inv-head"><span id="invGunName">WATER GUNS</span><small id="invGunCount"></small><span class="inv-tipp">tap to try on</span></div>
+          <div id="invGunGrid"></div>
+        </div>
+      </div>
+    </div>
+    <div id="invProbe"><div id="invProbeOben"></div><div id="invProbeName"></div><div id="invProbeInfo"></div><button id="invProbeBtn"></button></div>
+    <div id="invSchild"></div>
+
+    <div class="card hidden" id="passCard">
+      <div id="passHead">
+        <img data-asset="assets/pass.png" alt="">
+        <span id="passTitle" class="pass-t">SEASON PASS</span>
+        <span id="passTimer" class="pass-t"></span>
+        <button id="passX"><img data-asset="assets/cross_white_icon.png" alt="Close"></button>
+      </div>
+      <div id="passSeason"><span id="passSeasonName" class="pass-t">SEASON ONE</span><div id="passBar"><div id="passFill"></div></div><span id="passPoints" class="pass-t">0 / 150</span></div>
+      <div id="passTiles"></div>
+      <div id="passNav">
+        <button id="passPrev"><span class="pk-pattern"></span><span class="pk-image"></span></button>
+        <div id="passLine"><div id="passLineFill"></div></div>
+        <button id="passNext"><span class="pk-pattern"></span><span class="pk-image"></span></button>
+      </div>
+      <div id="passPage">Page 1 / 5</div>
+    </div>
+
+    <div class="card hidden look-stapel" id="kalCard">
+      <div id="kalHead">
+        <span class="kal-icon" id="kalKopfIcon"><i></i></span>
+        <span id="kalTitle" class="pass-t">ADVENT CALENDAR</span>
+        <span id="kalTimer" class="pass-t"></span>
+        <button id="kalX"><img data-asset="assets/cross_white_icon.png" alt="Close"></button>
+      </div>
+      <div id="kalTueren"></div><div id="kalHinweis"></div>
+    </div>
+
+    <div class="card hidden" id="roleCard">
+      <div id="roleTitle"></div>
+      <div id="roleMap" class="hidden"><img id="roleThumb" class="hidden" alt=""><span><small>MAP</small><b id="roleMapName"></b></span></div>
+      <p id="roleText"></p><div id="roleBar"><i></i></div>
+    </div>
+
+    <div class="card hidden" id="resultCard">
+      <div id="resultTitle"><span id="resultTitleText"></span></div>
+      <div class="kk-sek">PLAYERS</div><div id="resultList"></div>
+      <div class="kk-sek">REWARDS</div>
+      <div id="resultScore">
+        <div id="resultEarn">
+          <span class="xphalf"><img data-asset="assets/star_icon.png" alt=""><b id="resXp">+0 XP</b></span>
+          <span class="xphalf" id="resSplatWrap"><i class="splat"></i><b id="resSplats">+0</b></span>
+        </div>
+        <div class="kk-level"><b id="resLevel">LEVEL 1</b><i class="kk-bar"><i id="resLevelFill"></i></i><small id="resLevelPct">0%</small></div>
+      </div>
+      <div id="resultBtns">
+        <button class="big" id="againBtn"><img class="sicon" data-asset="assets/play_icon.png" alt="">PLAY AGAIN</button>
+        <div class="kk-reihe">
+          <button class="big adbtn hidden" id="adXpBtn"><img class="adxp" data-asset="assets/xp_coin.png" alt=""><span class="adleft"><b>2X XP &amp; SPLATS</b><small>Watch Ad</small></span></button>
+          <button class="big seekbtn hidden" id="adSeekerBtn"><img class="adeye" data-asset="assets/seeker_icon.png" alt=""><span class="adleft"><b>PLAY AS SEEKER</b><small>Watch Ad</small></span></button>
+        </div>
+        <button id="homeBtn"><img class="sicon" data-asset="assets/home_icon.png" alt="">HOME</button>
+      </div>
+    </div>
+
+    <div class="card hidden" id="caughtCard">
+      <div id="caughtTitle"><span>CAUGHT!</span></div>
+      <div id="caughtSub">The round is still running</div>
+      <div id="caughtScore">
+        <div id="caughtEarn">
+          <span class="xphalf"><img data-asset="assets/star_icon.png" alt=""><b id="caughtXp">+0 XP</b></span>
+          <span class="xphalf" id="caughtSplatWrap"><i class="splat"></i><b id="caughtSplats">+0</b></span>
+        </div>
+        <div id="caughtSplatInfo"></div>
+      </div>
+      <div id="caughtBtns">
+        <button class="big" id="caughtAgainBtn"><img class="sicon" data-asset="assets/play_icon.png" alt="">PLAY AGAIN</button>
+        <div class="kk-reihe">
+          <button class="big adbtn hidden" id="adCaughtBtn"><img class="adxp" data-asset="assets/xp_coin.png" alt=""><span class="adleft"><b>2X XP &amp; SPLATS</b><small>Watch Ad</small></span></button>
+          <button class="big seekbtn hidden" id="adCaughtSeekerBtn"><img class="adeye" data-asset="assets/seeker_icon.png" alt=""><span class="adleft"><b>PLAY AS SEEKER</b><small>Watch Ad</small></span></button>
+        </div>
+        <div class="kk-reihe">
+          <button id="caughtX"><img class="sicon" data-asset="assets/freecam_icon.png" alt="">KEEP WATCHING</button>
+          <button id="caughtLeaveBtn"><img class="sicon" data-asset="assets/leave_icon.png" alt="">LEAVE</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="myLoader">
+  <div class="spinner"></div>
+  <div class="status" id="myStatus">Loading…</div>
+  <div class="bar-wrap"><div class="bar" id="myBar"></div></div>
+  <div class="mb" id="myMB"></div>
+</div>
+
+<script>
+setTimeout(function () {
+  var l = document.getElementById('loading');
+  if (l && !l.classList.contains('hidden')) document.getElementById('loadRetry').classList.remove('hidden');
+}, 15000);
+document.getElementById('loadRetry').addEventListener('click', function () { location.reload(); });
+</script>
+</body>
+</html>
