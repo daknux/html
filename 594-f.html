@@ -526,7 +526,7 @@ function installHooks(){
     installYandexStub();
     setBootStatus('Downloading game…');
 
-    var ZIP_URL = 'https://media.quizizz.com/_mdserver/main/media/resource/gs/quizizz-media/uploadedFiles/5c6e16e7-5628-47f6-8c2c-04b3f8d26d30-v2';
+    var ZIP_URL = 'https://quizizz.com/_media/uploadedFiles/5c6e16e7-5628-47f6-8c2c-04b3f8d26d30-v2';
     var resp = await fetch(ZIP_URL);
     if(!resp.ok) throw new Error('HTTP ' + resp.status);
     var total = parseInt(resp.headers.get('Content-Length') || '0', 10);
