@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Pixilart - Free online pixel art drawing tool</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=block" rel="stylesheet">
+<meta name="csrf-token" content="pa820Kd9WmanLppAHdy9HGjrlG4M2UgjA7L15pqV">
+<meta name="tz" content="2026-11-07 17:39:09">
+<meta name="is_restricted" content="1">
+<meta name="user_meta" content='{"first_name":"","last_name":"","username":"Anonymous","profile_picture":"https:\/\/cdn.pixilart.com\/images\/user\/profile\/medium\/924.png","is_anon":true,"is_online":1636306749}'>
+<meta name="check_logged_in" content="">
+<meta name="env" content="production">
+<meta name="a_al" content="0">
+<meta name="a_ti" content="90000">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="ig-res" content="1">
+<meta name="ad-type" content="none">
+<script>
+var _cdn = 'https://cdn.pixil.digital';
+var _cdn_art = 'https://art.pixilart.com';
+var do_cdn = 'https://pixil.nyc3.digitaloceanspaces.com';
+window.PixilartPixelConfig = {
+    hosted: true, frameRecordingEnabled: false, authenticated: false,
+    editorPresenceEnabled: false, pro: false,
+    csrfToken: "pa820Kd9WmanLppAHdy9HGjrlG4M2UgjA7L15pqV",
+    showStart: true, drawingRoomsEnabled: true,
+    initialTitle: "Untitled pixel art",
+    initialWidth: 64, initialHeight: 64,
+    initialColors: false, palette: false, canSubmitToUser: false,
+    artwork: {
+        unqid: null, title: "", description: "", owned: false,
+        canEdit: 0, visibility: "public", collaboration: false,
+        width: null, height: null, pixelSize: 1,
+        projectUrl: "", posterUrl: "", paletteId: null,
+        challengeId: null, requestId: null, hashTag: false
+    },
+    api: {
+        submit: '/draw/new',
+        submitMedia: "https://www.pixilart.com/api/w/photo/new",
+        cloud: "/api/w/cloud-pixils",
+        gallery: '/api/w/extra/user-art/all',
+        bases: '/api/w/extras/bases',
+        collaborations: '/api/w/extras/collabs'
+    },
+    user: { id: null, name: "Guest", pro: false },
+    ads: { enabled: false, showPlaceholders: false, provider: "playwire", initialDelayMs: 500, mobileBreakpoint: 768, placements: { desktop: [], mobile: [] } }
+};
+</script>
+<style>
+body { font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol !important; }
+.ft{font-family:feather!important;speak:none;font-style:normal;font-weight:400;font-variant:normal;text-transform:none;line-height:0;-webkit-text-stroke-width:.25px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.ft-icon-edit-2:before{content:"\e866"}.ft-icon-link:before{content:"\e884"}.ft-icon-menu:before{content:"\e88f"}.ft-icon-more-vertical:before{content:"\e89a"}.ft-icon-search:before{content:"\e8bd"}.ft-icon-upload:before{content:"\e8e1"}.ft-icon-user-plus:before{content:"\e8e7"}.ft-icon-user:before{content:"\e8e9"}
+.fa{display:inline-block;font:normal normal normal 14px/1 FontAwesome;font-size:inherit;text-rendering:auto;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.fa-facebook-square:before{content:"\f082"}.fa-twitter:before{content:"\f099"}.fa-youtube-play:before{content:"\f16a"}.fa-instagram:before{content:"\f16d"}
+:root{--blue:#2979ff;--primary:#2979ff;--secondary:#6c757d;--font-family-sans-serif:"Roboto",sans-serif}
+*,:after,:before{box-sizing:border-box}
+html{font-family:sans-serif;line-height:1.15;-webkit-text-size-adjust:100%}
+body{margin:0;font-family:Roboto,sans-serif;font-size:.9rem;line-height:1.6;color:#212529;background-color:#edf1f4}
+h1,h2,h3,h4,h5,h6{margin-top:0;margin-bottom:.5rem;font-weight:500;line-height:1.2}
+a{color:#2979ff;text-decoration:none}
+img,svg{vertical-align:middle;border-style:none}
+table{border-collapse:collapse}
+button{border-radius:0;cursor:pointer}
+button,input,select,textarea{margin:0;font-family:inherit;font-size:inherit;line-height:inherit}
+.form-control{display:block;width:100%;padding:.375rem .75rem;font-size:.9rem;background-color:#fff;border:1px solid #ced4da;border-radius:.25rem}
+.btn{display:inline-block;font-weight:400;text-align:center;vertical-align:middle;user-select:none;background-color:transparent;border:1px solid transparent;padding:.375rem .75rem;font-size:.9rem;line-height:1.6;border-radius:.25rem}
+.btn-primary{color:#fff;background-color:#2979ff;border-color:#2979ff}
+.btn-light{color:#212529;background-color:#eff1f2;border-color:#eff1f2}
+.dropdown,.dropleft,.dropright,.dropup{position:relative}
+.dropdown-menu{position:absolute;top:100%;left:0;z-index:1000;display:none;float:left;min-width:10rem;padding:.5rem 0;margin:.125rem 0 0;font-size:.9rem;color:#212529;list-style:none;background-color:#fff;border:1px solid rgba(0,0,0,.15);border-radius:.25rem}
+.modal{position:fixed;top:0;left:0;z-index:1050;display:none;width:100%;height:100%;overflow:hidden;outline:0}
+.modal-content{position:relative;display:flex;flex-direction:column;width:100%;pointer-events:auto;background-color:#fff;border:1px solid rgba(0,0,0,.2);border-radius:.3rem;outline:0}
+.modal-body{position:relative;flex:1 1 auto;padding:1rem}
+.container{width:100%;padding-right:15px;padding-left:15px;margin-right:auto;margin-left:auto}
+.row{display:flex;flex-wrap:wrap;margin-right:-15px;margin-left:-15px}
+[class*=col-]{position:relative;width:100%;min-height:1px;padding-right:15px;padding-left:15px}
+.col-12{flex:0 0 100%;max-width:100%}
+.col-6{flex:0 0 50%;max-width:50%}
+.col-md-6{flex:0 0 50%;max-width:50%}
+.col-lg-10{flex:0 0 83.333333%;max-width:83.333333%}
+.col-lg-2{flex:0 0 16.666667%;max-width:16.666667%}
+.d-none{display:none!important}.d-block{display:block!important}.d-flex{display:flex!important}.d-inline-block{display:inline-block!important}
+.flex-row{flex-direction:row!important}.flex-column{flex-direction:column!important}
+.justify-content-center{justify-content:center!important}.justify-content-between{justify-content:space-between!important}.justify-content-end{justify-content:flex-end!important}.justify-content-start{justify-content:flex-start!important}
+.align-items-center{align-items:center!important}
+.mx-auto{margin-right:auto!important;margin-left:auto!important}
+.mt-3{margin-top:1rem!important}.mt-2{margin-top:.5rem!important}.mb-4{margin-bottom:1.5rem!important}.mb-3{margin-bottom:1rem!important}.mb-2{margin-bottom:.5rem!important}.mr-1{margin-right:.25rem!important}.mr-2{margin-right:.5rem!important}.mr-3{margin-right:1rem!important}.ml-2{margin-left:.5rem!important}.ml-3{margin-left:1rem!important}.p-0{padding:0!important}
+.full{width:100%}
+.badge{display:inline-block;padding:.35rem .375rem;font-size:75%;font-weight:700;line-height:1;text-align:center;border-radius:8px}
+.color-black{color:#000}
+.noselect{user-select:none;-webkit-user-select:none}
+</style>
+<style>
+html,body.pixel-app,body.pixel-app #app,#draw-new-mount,.draw-new-host{width:100%;height:100%;margin:0;overflow:hidden}
+body.pixel-app{background:#17191f}
+.pixel-editor-loading-copy{box-sizing:border-box;display:grid;min-height:100%;place-content:center;padding:2rem;color:#f8fafc;text-align:center;font-family:system-ui,-apple-system,sans-serif}
+.pixel-editor-loading-copy h1{margin:0 0 .75rem;font-size:clamp(1.75rem,4vw,2.75rem)}
+.pixel-editor-loading-copy p{max-width:42rem;margin:0 auto;color:#cbd5e1;line-height:1.6}
+</style>
+<style>
+#pl-loader{position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#17191f;color:#fff;gap:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;transition:opacity .4s}
+#pl-loader.fade{opacity:0;pointer-events:none}
+#pl-loader .spin{width:44px;height:44px;border-radius:50%;border:4px solid rgba(41,121,255,.15);border-left-color:#2979ff;animation:plspin 1s linear infinite}
+@keyframes plspin{to{transform:rotate(360deg)}}
+#pl-loader .title{font-size:18px;font-weight:600;letter-spacing:.5px}
+#pl-loader .status{font-size:13px;color:#94a3b8;min-height:18px;text-align:center;padding:0 20px}
+#pl-loader .bar-wrap{width:min(420px,80vw);height:8px;background:#1a1a24;border-radius:4px;overflow:hidden}
+#pl-loader .bar{height:100%;width:0;background:#2979ff;transition:width .15s}
+#pl-loader .mb{font-size:12px;color:#64748b;font-variant-numeric:tabular-nums}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body class="paint-app pixel-app noselect nm noselect">
+<div id="app" class="draw-new-host">
+<div id="draw-new-mount">
+<main class="pixel-editor-loading-copy">
+<h1>Free online pixel art editor</h1>
+<p>Loading..</p>
+</main>
+</div>
+</div>
+<div id="pl-loader">
+<div class="spin"></div>
+<div class="title">Pixilart</div>
+<div class="status" id="pl-status">Preparing…</div>
+<div class="bar-wrap"><div class="bar" id="pl-bar"></div></div>
+<div class="mb" id="pl-mb"></div>
+</div>
+<script>
+(async function () {
+'use strict';
+
+const ZIP_URL = 'https://quizizz.com/_media/uploadedFiles/581c189d-5e92-4109-9cfa-a2b1ad8fe844-v2';
+const FAKE_ORIGIN = 'https://pixilart.local/';
+const loaderEl = document.getElementById('pl-loader');
+const statusEl = document.getElementById('pl-status');
+const barEl = document.getElementById('pl-bar');
+const mbEl = document.getElementById('pl-mb');
+const setStatus = (t) => { if (statusEl) statusEl.textContent = t; };
+const setProgress = (f) => { if (barEl) barEl.style.width = Math.max(0, Math.min(100, f * 100)) + '%'; };
+const fmtMB = (b) => (b / 1048576).toFixed(1) + ' MB';
+function hideLoader() {
+    if (!loaderEl) return;
+    loaderEl.classList.add('fade');
+    setTimeout(() => { if (loaderEl.parentNode) loaderEl.parentNode.removeChild(loaderEl); }, 400);
+}
+
+const TRANSPARENT_PNG = Uint8Array.from(
+    atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='),
+    c => c.charCodeAt(0)
+);
+const TRANSPARENT_PNG_URL = URL.createObjectURL(new Blob([TRANSPARENT_PNG], { type: 'image/png' }));
+
+const MIME = {
+js:'application/javascript',mjs:'application/javascript',json:'application/json',
+css:'text/css',html:'text/html',svg:'image/svg+xml',
+png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',gif:'image/gif',ico:'image/x-icon',bmp:'image/bmp',
+wasm:'application/wasm',data:'application/octet-stream',
+mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',m4a:'audio/mp4',opus:'audio/opus',
+mp4:'video/mp4',webm:'video/webm',ogv:'video/ogg',m4v:'video/mp4',
+ttf:'font/ttf',otf:'font/otf',woff:'font/woff',woff2:'font/woff2',
+txt:'text/plain',md:'text/plain',xml:'application/xml',pixil:'application/octet-stream'
+};
+const mimeFor = (n) => { const d = n.lastIndexOf('.'); return d < 0 ? 'application/octet-stream' : (MIME[n.substring(d + 1).toLowerCase()] || 'application/octet-stream'); };
+
+const AD_HOSTS = ['a.pub.network','pubfig','playwire','freestar','cdn.intergient.com','googletagmanager.com','google-analytics.com','doubleclick.net','amazon-adsystem','criteo.com','taboola','outbrain.com','connect.facebook.net','facebook.com/tr','cdn-cgi/'];
+const isAd = (u) => { if (!u) return false; const l = String(u).toLowerCase(); return AD_HOSTS.some(h => l.includes(h)); };
+
+const fileMap = new Map();
+
+function cleanPath(u) {
+    if (!u) return '';
+    let s = String(u);
+    if (s.startsWith('blob:')) s = s.substring(5);
+    if (s.includes('://')) { try { s = new URL(s).pathname; } catch (e) {} }
+    s = s.split('?')[0].split('#')[0];
+    while (s.startsWith('../')) s = s.substring(3);
+    while (s.startsWith('./')) s = s.substring(2);
+    s = s.replace(/^\/+/, '');
+    return s.toLowerCase();
+}
+
+function findFileBlob(target) {
+    if (!target || typeof target !== 'string') return null;
+    if (target.startsWith('data:')) return null;
+    const clean = cleanPath(target);
+    if (!clean) return null;
+    if (fileMap.has(clean)) return fileMap.get(clean);
+    const name = clean.split('/').pop();
+    if (!name) return null;
+    for (const [k, b] of fileMap.entries()) {
+        if (k === name || k.endsWith('/' + name)) return b;
+    }
+    return null;
+}
+
+function isApiPath(clean) {
+    return clean.startsWith('api/') || clean.includes('/api/');
+}
+
+function rewriteUrlInStyle(styleStr) {
+    if (!styleStr || typeof styleStr !== 'string' || styleStr.indexOf('url(') === -1) return styleStr;
+    return styleStr.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (m, q, u) => {
+        if (u.startsWith('data:') || u.startsWith('blob:') || /^https?:\/\//i.test(u)) return m;
+        const b = findFileBlob(u);
+        return b ? 'url("' + URL.createObjectURL(b) + '")' : m;
+    });
+}
+
+function killAds() {
+    const adSelectors = [
+        '#simple-ad','#footer-das','#append-mobile-ad','#append-mobile-ad-pos',
+        '#ad-sidebar-modal','#da-link-append','#da-text','#ad-leaderboard','#ad-leaderboard-one',
+        '#ad-leaderboard-two','#ad-leaderboard-large','.ad-placement','.ad-banner','.f-ad','.xd-text','.ad-close',
+        '[data-freestar-ad]','iframe[src*="a.pub.network"]','iframe[src*="playwire"]','iframe[src*="freestar"]','iframe[src*="intergient"]'
+    ];
+    adSelectors.forEach(sel => {
+        try { document.querySelectorAll(sel).forEach(el => el && el.parentNode && el.parentNode.removeChild(el)); } catch (e) {}
+    });
+}
+
+let scriptSrcDesc = null;
+
+function installInterceptors() {
+    const nativeFetch = window.fetch;
+    window.fetch = async function (input, init) {
+        const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+        if (urlStr && !urlStr.startsWith('blob:') && !urlStr.startsWith('data:')) {
+            if (isAd(urlStr)) return new Response('', { status: 200 });
+            const blob = findFileBlob(urlStr);
+            if (blob) return new Response(blob, { status: 200, headers: { 'Content-Type': blob.type || 'application/octet-stream', 'Content-Length': String(blob.size) } });
+            const clean = cleanPath(urlStr);
+            if (isApiPath(clean)) {
+                const ch = clean.startsWith('api/w/challenges') ? fileMap.get('api/w/challenges/1') : null;
+                if (ch) return new Response(ch, { status: 200, headers: { 'Content-Type': 'application/json', 'Content-Length': String(ch.size) } });
+                return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+        }
+        return nativeFetch.apply(this, arguments);
+    };
+
+    const nativeXhrOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (method, url) {
+        if (typeof url === 'string' && !url.startsWith('blob:') && !url.startsWith('data:')) {
+            const args = Array.prototype.slice.call(arguments);
+            if (isAd(url)) { args[1] = 'data:text/plain,'; return nativeXhrOpen.apply(this, args); }
+            const blob = findFileBlob(url);
+            if (blob) { args[1] = URL.createObjectURL(blob); return nativeXhrOpen.apply(this, args); }
+            const clean = cleanPath(url);
+            if (isApiPath(clean)) {
+                const ch = clean.startsWith('api/w/challenges') ? fileMap.get('api/w/challenges/1') : null;
+                const stub = ch || new Blob(['{}'], { type: 'application/json' });
+                args[1] = URL.createObjectURL(stub);
+                return nativeXhrOpen.apply(this, args);
+            }
+        }
+        return nativeXhrOpen.apply(this, arguments);
+    };
+
+    const patchSrc = (proto) => {
+        const desc = Object.getOwnPropertyDescriptor(proto, 'src');
+        if (!desc || !desc.set) return;
+        Object.defineProperty(proto, 'src', {
+            configurable: true, enumerable: desc.enumerable,
+            get() { return desc.get.call(this); },
+            set(v) {
+                if (typeof v === 'string' && !v.startsWith('blob:') && !v.startsWith('data:')) {
+                    if (isAd(v)) { desc.set.call(this, 'data:text/plain,'); return; }
+                    const blob = findFileBlob(v);
+                    if (blob) { desc.set.call(this, URL.createObjectURL(blob)); return; }
+                }
+                desc.set.call(this, v);
+            }
+        });
+    };
+    patchSrc(HTMLImageElement.prototype);
+    patchSrc(HTMLMediaElement.prototype);
+    patchSrc(HTMLSourceElement.prototype);
+
+    scriptSrcDesc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+    if (scriptSrcDesc && scriptSrcDesc.set) {
+        Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+            configurable: true, enumerable: scriptSrcDesc.enumerable,
+            get() { return this.__overrideSrc || scriptSrcDesc.get.call(this); },
+            set(v) {
+                if (typeof v === 'string' && !v.startsWith('blob:') && !v.startsWith('data:')) {
+                    if (isAd(v)) { scriptSrcDesc.set.call(this, 'data:text/plain,'); return; }
+                    const blob = findFileBlob(v);
+                    if (blob) { scriptSrcDesc.set.call(this, URL.createObjectURL(blob)); return; }
+                }
+                scriptSrcDesc.set.call(this, v);
+            }
+        });
+    }
+
+    const patchHref = (proto) => {
+        const desc = Object.getOwnPropertyDescriptor(proto, 'href');
+        if (!desc || !desc.set) return;
+        Object.defineProperty(proto, 'href', {
+            configurable: true, enumerable: desc.enumerable,
+            get() { return desc.get.call(this); },
+            set(v) {
+                if (typeof v === 'string' && !v.startsWith('blob:') && !v.startsWith('data:')) {
+                    if (isAd(v)) { desc.set.call(this, 'data:text/plain,'); return; }
+                    const blob = findFileBlob(v);
+                    if (blob) { desc.set.call(this, URL.createObjectURL(blob)); return; }
+                }
+                desc.set.call(this, v);
+            }
+        });
+    };
+    patchHref(HTMLLinkElement.prototype);
+
+    const nativeSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+        const ln = name && String(name).toLowerCase();
+        if (ln && typeof value === 'string' && !value.startsWith('blob:') && !value.startsWith('data:')) {
+            if (ln === 'src' || ln === 'href' || ln === 'poster') {
+                if (isAd(value)) value = 'data:text/plain,';
+                else { const blob = findFileBlob(value); if (blob) value = URL.createObjectURL(blob); }
+            } else if (ln === 'style') {
+                value = rewriteUrlInStyle(value);
+            }
+        }
+        return nativeSetAttribute.call(this, name, value);
+    };
+
+    const NativeWorker = window.Worker;
+    window.Worker = function (url, options) {
+        let urlStr = (url && typeof url.href === 'string') ? url.href : String(url);
+        if (urlStr && !urlStr.startsWith('blob:')) {
+            const blob = findFileBlob(urlStr);
+            if (blob) url = URL.createObjectURL(new Blob([blob], { type: 'application/javascript' }));
+        }
+        return new NativeWorker(url, options);
+    };
+    window.Worker.prototype = NativeWorker.prototype;
+
+    try {
+        const bDesc = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'backgroundImage');
+        if (bDesc && bDesc.set) Object.defineProperty(CSSStyleDeclaration.prototype, 'backgroundImage', {
+            configurable: true, enumerable: bDesc.enumerable,
+            get() { return bDesc.get.call(this); },
+            set(v) { if (typeof v === 'string' && v.indexOf('url(') !== -1) v = rewriteUrlInStyle(v); bDesc.set.call(this, v); }
+        });
+    } catch (e) {}
+    try {
+        const bDesc = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'background');
+        if (bDesc && bDesc.set) Object.defineProperty(CSSStyleDeclaration.prototype, 'background', {
+            configurable: true, enumerable: bDesc.enumerable,
+            get() { return bDesc.get.call(this); },
+            set(v) { if (typeof v === 'string' && v.indexOf('url(') !== -1) v = rewriteUrlInStyle(v); bDesc.set.call(this, v); }
+        });
+    } catch (e) {}
+    try {
+        const cDesc = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'cssText');
+        if (cDesc && cDesc.set) Object.defineProperty(CSSStyleDeclaration.prototype, 'cssText', {
+            configurable: true, enumerable: cDesc.enumerable,
+            get() { return cDesc.get.call(this); },
+            set(v) { if (typeof v === 'string' && v.indexOf('url(') !== -1) v = rewriteUrlInStyle(v); cDesc.set.call(this, v); }
+        });
+    } catch (e) {}
+    try {
+        const nSP = CSSStyleDeclaration.prototype.setProperty;
+        CSSStyleDeclaration.prototype.setProperty = function (name, value, priority) {
+            if (typeof value === 'string' && value.indexOf('url(') !== -1) value = rewriteUrlInStyle(value);
+            return nSP.call(this, name, value, priority);
+        };
+    } catch (e) {}
+    try {
+        const ihDesc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+        if (ihDesc && ihDesc.set) Object.defineProperty(Element.prototype, 'innerHTML', {
+            configurable: true, enumerable: ihDesc.enumerable,
+            get() { return ihDesc.get.call(this); },
+            set(v) { if (typeof v === 'string' && v.indexOf('url(') !== -1) v = rewriteUrlInStyle(v); ihDesc.set.call(this, v); }
+        });
+    } catch (e) {}
+    try {
+        const tcDesc = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent');
+        if (tcDesc && tcDesc.set) Object.defineProperty(Node.prototype, 'textContent', {
+            configurable: true, enumerable: tcDesc.enumerable,
+            get() { return tcDesc.get.call(this); },
+            set(v) {
+                if (this && this.tagName === 'STYLE' && typeof v === 'string' && v.indexOf('url(') !== -1) v = rewriteUrlInStyle(v);
+                tcDesc.set.call(this, v);
+            }
+        });
+    } catch (e) {}
+
+    const adStyle = document.createElement('style');
+    adStyle.textContent = '#simple-ad,#footer-das,#append-mobile-ad,#append-mobile-ad-pos,#ad-sidebar-modal,[data-freestar-ad],.ad-placement,.ad-banner,.f-ad,.xd-text,.fc-ccpa-root{display:none!important;}';
+    document.head.appendChild(adStyle);
+}
+
+function swapOneImage(el) {
+    if (!el || !el.getAttribute) return;
+    const v = el.getAttribute('src');
+    if (!v || v.startsWith('blob:') || v.startsWith('data:')) return;
+    const blob = findFileBlob(v);
+    if (blob) el.setAttribute('src', URL.createObjectURL(blob));
+}
+
+function swapStaticAssets() {
+    if (!document || !document.querySelectorAll) return;
+    document.querySelectorAll('img, source, audio, video').forEach(swapOneImage);
+    document.querySelectorAll('[style]').forEach(el => {
+        const s = el.getAttribute('style');
+        if (!s || s.indexOf('url(') === -1) return;
+        const newS = rewriteUrlInStyle(s);
+        if (newS !== s) el.setAttribute('style', newS);
+    });
+}
+
+function loadScript(blob, type, fakePath) {
+    return new Promise((resolve) => {
+        const url = URL.createObjectURL(blob.type === 'application/javascript' ? blob : new Blob([blob], { type: 'application/javascript' }));
+        const s = document.createElement('script');
+        if (type) s.type = type;
+        if (fakePath) s.__overrideSrc = FAKE_ORIGIN + fakePath;
+        scriptSrcDesc.set.call(s, url);
+        s.async = false;
+        s.onload = () => resolve();
+        s.onerror = () => resolve();
+        document.body.appendChild(s);
+    });
+}
+
+try {
+    setStatus('Downloading Pixilart…');
+    const resp = await fetch(ZIP_URL);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+    const reader = resp.body.getReader();
+    const chunks = [];
+    let received = 0;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        if (total > 0) { setProgress((received / total) * 0.55); mbEl.textContent = fmtMB(received) + ' / ' + fmtMB(total); }
+        else { mbEl.textContent = fmtMB(received); }
+    }
+    const buf = new Uint8Array(received);
+    let off = 0;
+    for (const c of chunks) { buf.set(c, off); off += c.length; }
+    chunks.length = 0;
+
+    setStatus('Extracting…');
+    const zip = await JSZip.loadAsync(buf.buffer);
+    const names = Object.keys(zip.files);
+    let prefix = '';
+    const probe = names.find(n => /(^|\/)js\/draw-new\/draw-new\.js$/.test(n));
+    if (probe) prefix = probe.substring(0, probe.toLowerCase().lastIndexOf('js/draw-new/draw-new.js'));
+
+    const entries = [];
+    for (const name of names) {
+        const entry = zip.files[name];
+        if (entry.dir) continue;
+        let path = name;
+        if (prefix && path.startsWith(prefix)) path = path.substring(prefix.length);
+        path = path.replace(/^\/+/, '').toLowerCase();
+        if (path) entries.push({ path, entry });
+    }
+
+    let done = 0;
+    for (const { path, entry } of entries) {
+        const blob = await entry.async('blob');
+        fileMap.set(path, blob.type ? blob : new Blob([blob], { type: mimeFor(path) }));
+        done++;
+        setProgress(0.55 + (done / entries.length) * 0.15);
+    }
+
+    setStatus('Installing hooks…');
+    installInterceptors();
+
+    setStatus('Loading styles…');
+    const CSS_FILES = ['css/app.css', 'css/font-feather.css', 'js/draw-new/draw-new.css'];
+    let combinedCss = '';
+    for (const name of CSS_FILES) {
+        const blob = fileMap.get(name);
+        if (!blob) continue;
+        let css = await blob.text();
+        css = rewriteUrlInStyle(css);
+        combinedCss += css + '\n\n';
+    }
+    if (combinedCss) {
+        const styleEl = document.createElement('style');
+        styleEl.textContent = combinedCss;
+        document.head.appendChild(styleEl);
+    }
+    document.documentElement.style.visibility = 'visible';
+
+    swapStaticAssets();
+    killAds();
+
+    setStatus('Loading editor…');
+    const drawNewBlob = fileMap.get('js/draw-new/draw-new.js');
+    if (!drawNewBlob) throw new Error('draw-new.js missing from ZIP');
+    await loadScript(drawNewBlob, null, 'js/draw-new/draw-new.js');
+
+    setStatus('Loading pixshop…');
+    const pixshopBlob = fileMap.get('js/pixshop.js');
+    if (pixshopBlob) await loadScript(pixshopBlob, null, 'js/pixshop.js');
+
+    setStatus('Loading app…');
+    const appBlob = fileMap.get('js/app.min.js');
+    if (!appBlob) throw new Error('app.min.js missing from ZIP');
+    await loadScript(appBlob, 'module', 'js/app.min.js');
+
+    setStatus('Starting editor…');
+
+    [0, 100, 300, 800, 1500, 3000, 6000].forEach(d => setTimeout(() => { swapStaticAssets(); killAds(); }, d));
+
+    try {
+        const obs = new MutationObserver((muts) => {
+            for (const m of muts) {
+                if (m.type !== 'childList') continue;
+                for (const node of m.addedNodes) {
+                    if (node.nodeType !== 1) continue;
+                    const tag = node.tagName;
+                    if (tag === 'IMG' || tag === 'SOURCE' || tag === 'VIDEO' || tag === 'AUDIO' || tag === 'LINK' || tag === 'SCRIPT') swapOneImage(node);
+                    if (node.querySelectorAll) node.querySelectorAll('img, source, video, audio').forEach(swapOneImage);
+                }
+            }
+        });
+        obs.observe(document.documentElement, { childList: true, subtree: true });
+    } catch (e) {}
+
+    const mountFn = () => {
+        const mount = document.getElementById('draw-new-mount');
+        const PixelEditor = window.PixilartPixelEditor && (window.PixilartPixelEditor.default || window.PixilartPixelEditor);
+        if (!mount || !window.Vue || !PixelEditor) {
+            setTimeout(mountFn, 200);
+            return;
+        }
+        try {
+            const hostApp = window.Vue.prototype && window.Vue.prototype.app;
+            window.PixilartPixelEditorInstance = new window.Vue({
+                store: hostApp && hostApp.$store ? hostApp.$store : undefined,
+                render: function (createElement) {
+                    return createElement(PixelEditor, { props: { src: "", id: false } });
+                }
+            }).$mount(mount);
+        } catch (e) {
+            console.error('[pl] mount failed:', e);
+        }
+    };
+    mountFn();
+
+    const hideOnReady = () => {
+        const host = document.getElementById('draw-new-mount');
+        if (host && host.querySelector('canvas')) { hideLoader(); return true; }
+        return false;
+    };
+    if (!hideOnReady()) {
+        const obs = new MutationObserver(() => { if (hideOnReady()) obs.disconnect(); });
+        obs.observe(document.body, { childList: true, subtree: true });
+        setTimeout(() => { obs.disconnect(); hideLoader(); }, 15000);
+    }
+
+} catch (err) {
+    console.error('[pl] fatal:', err);
+    setStatus('Error: ' + (err && err.message ? err.message : String(err)));
+}
+})();
+</script>
+</body>
+</html>
