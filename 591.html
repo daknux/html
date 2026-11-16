@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DandyGame</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+  html, body {
+    margin:0; padding:0; width:100vw; height:100vh;
+    overflow:hidden; background:#231F20; color:#fff;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:rgba(0,0,0,0);
+    -webkit-touch-callout:none;
+  }
+  canvas:focus { outline:none; }
+  #unity-canvas {
+    width:100vw; height:100vh; display:block;
+    position:absolute; left:0; top:0; background:#231F20; outline:none;
+  }
+  #loader {
+    position:fixed; inset:0; z-index:9999;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:#000000; color:#fff;
+    transition:opacity .4s ease;
+  }
+  #loader .spinner {
+    width:50px; height:50px; border-radius:50%;
+    border:4px solid rgba(255,255,255,0.1);
+    border-left-color:#09f;
+    animation:spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #loader .status {
+    margin-top:16px; font-size:14px; opacity:0.85;
+    min-height:18px; text-align:center; padding:0 20px;
+  }
+  #loader .bar-wrap {
+    margin-top:20px; width:260px; height:8px;
+    background:rgba(255,255,255,0.1);
+    border-radius:4px; overflow:hidden;
+  }
+  #loader .bar {
+    height:100%; width:0%; background:#09f;
+    transition:width .15s linear;
+  }
+  #loader .mb {
+    margin-top:6px; font-size:12px; opacity:0.5;
+    font-variant-numeric:tabular-nums;
+  }
+  #mouse-lock-warning {
+    position:fixed;
+    left:50%;
+    top:20px;
+    transform:translateX(-50%);
+    z-index:5000;
+    padding:12px 20px;
+    border-radius:6px;
+    background:#ffeb3b;
+    color:#000000;
+    font-family:Arial,sans-serif;
+    font-size:16px;
+    font-weight:500;
+    text-align:center;
+    white-space:nowrap;
+    pointer-events:none;
+    user-select:none;
+    opacity:0;
+    transition:opacity 0.25s ease;
+  }
+  #mouse-lock-warning.visible { opacity:1; }
+  #mouse-lock-warning strong { font-weight:700; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<canvas id="unity-canvas" tabindex="-1"></canvas>
+<div id="loader">
+  <div class="spinner"></div>
+  <div class="status" id="loaderStatus">Preparing…</div>
+  <div class="bar-wrap"><div class="bar" id="loaderBar"></div></div>
+  <div class="mb" id="loaderMB"></div>
+</div>
+
+<div id="mouse-lock-warning">Press <strong>Z</strong> to lock mouse</div>
+
+<script>
+var myGameInstance = null;
+var ysdk = null;
+var player = null;
+var leaderboard = null;
+var payments = null;
+var initGame = false;
+var nowFullAdOpen = false;
+var cloudSaves = 'noData';
+var paymentsData = 'none';
+var environmentData = 'null';
+var playerData = 'noData';
+var flasgsData = 'null';
+
+function FocusGame() {
+    try { window.focus(); } catch (e) {}
+    var c = document.getElementById('unity-canvas');
+    if (c) try { c.focus(); } catch (e) {}
+}
+
+function InitGame() {
+    initGame = true;
+    if (nowFullAdOpen === true && myGameInstance != null) {
+        myGameInstance.SendMessage('YandexGame', 'OpenFullAd');
+    }
+}
+
+function FullAdShow() {
+    try {
+        if (nowFullAdOpen !== true && ysdk !== null) {
+            ysdk.adv.showFullscreenAdv({
+                callbacks: {
+                    onOpen: function () {
+                        nowFullAdOpen = true;
+                        if (initGame === true && myGameInstance != null) {
+                            myGameInstance.SendMessage('YandexGame', 'OpenFullAd');
+                        }
+                    },
+                    onClose: function (wasShown) {
+                        nowFullAdOpen = false;
+                        if (initGame === true && myGameInstance != null) {
+                            myGameInstance.SendMessage('YandexGame', 'CloseFullAd', wasShown ? 'true' : 'false');
+                        }
+                        FocusGame();
+                    },
+                    onError: function () {
+                        if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'ErrorFullAd');
+                        FocusGame();
+                    }
+                }
+            });
+        }
+    } catch (e) {}
+}
+
+function RewardedShow(id) {
+    try {
+        if (ysdk === null) return;
+        ysdk.adv.showRewardedVideo({
+            callbacks: {
+                onOpen: function () { if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'OpenVideo'); },
+                onClose: function () { if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'CloseVideo'); FocusGame(); },
+                onRewarded: function () { if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'RewardVideo', id); },
+                onError: function () { if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'ErrorVideo'); }
+            }
+        });
+    } catch (e) {}
+}
+
+function StickyAdActivity(show) {
+    try {
+        if (ysdk === null) return;
+        ysdk.adv.getBannerAdvStatus().then(function (s) {
+            if (s.stickyAdvIsShowing) {
+                if (!show) ysdk.adv.hideBannerAdv();
+            } else if (show) {
+                ysdk.adv.showBannerAdv();
+            }
+        });
+    } catch (e) {}
+}
+
+function InitLeaderboard() {
+    try {
+        if (ysdk === null) return;
+        ysdk.getLeaderboards().then(function (l) {
+            leaderboard = l;
+            if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'InitializedLB');
+        });
+    } catch (e) {}
+}
+
+function SetLeaderboardScores(_name, score) {
+    try {
+        if (ysdk === null) return;
+        ysdk.getLeaderboards().then(function (l) { l.setLeaderboardScore(_name, score); });
+    } catch (e) {}
+}
+
+function GetLeaderboardScores(nameLB, maxPlayers, quantityTop, quantityAround, photoSize, auth) {
+    try {
+        if (ysdk === null) return;
+        var meta = { technoName: '', isDefault: false, isInvertSortOrder: false, decimalOffset: 0, type: '' };
+        ysdk.getLeaderboards().then(function (l) {
+            return l.getLeaderboardDescription(nameLB).then(function (r) {
+                meta.technoName = nameLB;
+                meta.isDefault = r.default;
+                meta.isInvertSortOrder = r.description.invert_sort_order;
+                meta.decimalOffset = r.description.score_format.options.decimal_offset;
+                meta.type = r.description.type;
+                return l.getLeaderboardEntries(nameLB, { quantityTop: quantityTop, includeUser: auth, quantityAround: quantityAround });
+            });
+        }).then(function (r) {
+            var merged = Object.assign({}, meta, EntriesLB(r, maxPlayers, photoSize));
+            if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'LeaderboardEntries', JSON.stringify(merged));
+        }).catch(function () {});
+    } catch (e) {}
+}
+
+function EntriesLB(res, maxPlayers, photoSize) {
+    var n = Math.min(res.entries.length, maxPlayers);
+    var ranks = [], photos = [], names = [], scores = [], ids = [], text = '';
+    for (var i = 0; i < n; i++) {
+        var e = res.entries[i];
+        ranks[i] = e.rank;
+        scores[i] = e.score;
+        ids[i] = e.player.uniqueID;
+        photos[i] = (photoSize === 'nonePhoto' || e.player.scopePermissions.avatar !== 'allow') ? 'nonePhoto' : e.player.getAvatarSrc(photoSize);
+        names[i] = e.player.scopePermissions.public_name !== 'allow' ? 'anonymous' : e.player.publicName;
+        text += ranks[i] + '. ' + names[i] + ': ' + scores[i] + '\n';
+    }
+    if (n === 0) text = 'no data';
+    return { entries: text, ranks: ranks, photos: photos, names: names, scores: scores, uniqueIDs: ids };
+}
+
+function Review() {
+    try {
+        if (ysdk === null) return;
+        ysdk.feedback.canReview().then(function (r) {
+            if (r.value) {
+                ysdk.feedback.requestReview().then(function (rr) {
+                    if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'ReviewSent', rr.feedbackSent ? 'true' : 'false');
+                    FocusGame();
+                });
+            } else FocusGame();
+        });
+    } catch (e) { FocusGame(); }
+}
+
+function PromptShow() {
+    try {
+        if (ysdk === null) return;
+        ysdk.shortcut.showPrompt().then(function (r) {
+            if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', r.outcome === 'accepted' ? 'OnPromptSuccess' : 'OnPromptFail');
+            FocusGame();
+        });
+    } catch (e) { FocusGame(); }
+}
+
+function SaveCloud(jsonData, flush) {
+    if (player === null) return;
+    try { player.setData({ saves: [jsonData] }, flush); } catch (e) {}
+}
+
+function LoadCloud(sendback) {
+    return new Promise(function (resolve) {
+        if (ysdk === null) {
+            if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', 'noData');
+            resolve('noData');
+            return;
+        }
+        try {
+            ysdk.getPlayer({ scopes: false }).then(function (p) {
+                p.getData(['saves']).then(function (data) {
+                    if (data.saves) {
+                        if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', JSON.stringify(data.saves));
+                        resolve(JSON.stringify(data.saves));
+                    } else {
+                        if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', 'noData');
+                        resolve('noData');
+                    }
+                }).catch(function () {
+                    if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', 'noData');
+                    resolve('noData');
+                });
+            }).catch(function () {
+                if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', 'noData');
+                resolve('noData');
+            });
+        } catch (e) {
+            if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetLoadSaves', 'noData');
+            resolve('noData');
+        }
+    });
+}
+
+function GetPayments(sendback) {
+    return new Promise(function (resolve) {
+        try {
+            if (ysdk === null) { resolve('none'); return; }
+            ysdk.getPayments().then(function (p) {
+                payments = p;
+                p.getCatalog().then(function (products) {
+                    p.getPurchases().then(function (purchases) {
+                        var ids = [], titles = [], descs = [], imgs = [], prices = [], consumed = [];
+                        for (var i = 0; i < products.length; i++) {
+                            ids[i] = products[i].id;
+                            titles[i] = products[i].title;
+                            descs[i] = products[i].description;
+                            imgs[i] = products[i].imageURI;
+                            prices[i] = products[i].price;
+                            consumed[i] = true;
+                            for (var j = 0; j < purchases.length; j++) {
+                                if (purchases[j].productID === ids[i]) { consumed[i] = false; break; }
+                            }
+                        }
+                        var json = {
+                            id: ids, title: titles, description: descs, imageURI: imgs,
+                            priceValue: prices, consumed: consumed,
+                            language: ysdk.environment.i18n.lang
+                        };
+                        if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'PaymentsEntries', JSON.stringify(json));
+                        resolve(JSON.stringify(json));
+                    });
+                });
+            }).catch(function () { resolve('none'); });
+        } catch (e) { resolve('none'); }
+    });
+}
+
+function BuyPayments(id) {
+    try {
+        if (payments !== null) {
+            payments.purchase(id).then(function () { ConsumePurchase(id); FocusGame(); }).catch(function () {
+                if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'OnPurchaseFailed', id);
+                FocusGame();
+            });
+        }
+    } catch (e) { FocusGame(); }
+}
+
+function ConsumePurchase(id) {
+    try {
+        if (payments !== null) {
+            payments.getPurchases().then(function (list) {
+                for (var i = 0; i < list.length; i++) {
+                    if (list[i].productID === id) {
+                        payments.consumePurchase(list[i].purchaseToken);
+                        if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'OnPurchaseSuccess', id);
+                    }
+                }
+            });
+        }
+    } catch (e) {}
+}
+
+function ConsumePurchases() {
+    try {
+        if (payments !== null) {
+            payments.getPurchases().then(function (list) {
+                for (var i = 0; i < list.length; i++) {
+                    payments.consumePurchase(list[i].purchaseToken);
+                    if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'OnPurchaseSuccess', list[i].productID);
+                }
+            });
+        }
+    } catch (e) {}
+}
+
+function RequestingEnvironmentData(sendback) {
+    return new Promise(function (resolve) {
+        if (ysdk === null) { resolve('null'); return; }
+        try {
+            var promptCanShow = false, reviewCanShow = false;
+            ysdk.feedback.canReview().then(function (r) {
+                if (r.value) reviewCanShow = true;
+                ysdk.shortcut.canShowPrompt().then(function (p) {
+                    if (p.canShow) promptCanShow = true;
+                    var browser = navigator.userAgent;
+                    if (/YaBrowser|YaSearchBrowser/.test(browser)) browser = 'Yandex';
+                    else if (/Opera|OPR/.test(browser)) browser = 'Opera';
+                    else if (/Firefox/.test(browser)) browser = 'Firefox';
+                    else if (/MSIE/.test(browser)) browser = 'IE';
+                    else if (/Edge/.test(browser)) browser = 'Edge';
+                    else if (/Chrome/.test(browser)) browser = 'Chrome';
+                    else if (/Safari/.test(browser)) browser = 'Safari';
+                    else browser = 'Other';
+                    var json = {
+                        language: ysdk.environment.i18n.lang,
+                        domain: ysdk.environment.i18n.tld,
+                        deviceType: ysdk.deviceInfo.type,
+                        isMobile: ysdk.deviceInfo.isMobile(),
+                        isDesktop: ysdk.deviceInfo.isDesktop(),
+                        isTablet: ysdk.deviceInfo.isTablet(),
+                        isTV: ysdk.deviceInfo.isTV(),
+                        appID: ysdk.environment.app.id,
+                        browserLang: ysdk.environment.browser.lang,
+                        payload: ysdk.environment.payload,
+                        promptCanShow: promptCanShow,
+                        reviewCanShow: reviewCanShow,
+                        platform: navigator.platform,
+                        browser: browser
+                    };
+                    if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetEnvirData', JSON.stringify(json));
+                    resolve(JSON.stringify(json));
+                });
+            });
+        } catch (e) { resolve('null'); }
+    });
+}
+
+function InitPlayer(sendback) {
+    return new Promise(function (resolve) {
+        try {
+            if (ysdk === null) {
+                var n = NotAuthorized();
+                if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetInitializationSDK', n);
+                resolve(n);
+                return;
+            }
+            ysdk.getPlayer({ scopes: true }).then(function (p) {
+                player = p;
+                if (p.getMode() === 'lite') {
+                    var n = NotAuthorized();
+                    if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetInitializationSDK', n);
+                    resolve(n);
+                } else {
+                    var a = JSON.stringify({
+                        playerAuth: 'resolved',
+                        playerName: p.getName(),
+                        playerId: p.getUniqueID(),
+                        playerPhoto: p.getPhoto('small')
+                    });
+                    if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetInitializationSDK', a);
+                    resolve(a);
+                }
+            }).catch(function () {
+                var n = NotAuthorized();
+                if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetInitializationSDK', n);
+                resolve(n);
+            });
+        } catch (e) {
+            var n = NotAuthorized();
+            if (sendback && myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'SetInitializationSDK', n);
+            resolve(n);
+        }
+    });
+}
+
+function NotAuthorized() {
+    return JSON.stringify({ playerAuth: 'rejected', playerName: 'unauthorized', playerId: 'unauthorized', playerPhoto: 'null' });
+}
+
+function OpenAuthDialog() {
+    if (ysdk === null) return;
+    try {
+        ysdk.auth.openAuthDialog().then(function () {
+            InitPlayer(true).then(function () {
+                if (myGameInstance != null) myGameInstance.SendMessage('YandexGame', 'GetDataInvoke');
+            });
+        });
+    } catch (e) {}
+}
+</script>
+
+<script>
+(function () {
+'use strict';
+
+var _err = console.error;
+console.error = function () {
+    var s = arguments[0];
+    if (typeof s === 'string' && (
+        s.indexOf('ArgumentNullException') !== -1 ||
+        s.indexOf('NullReferenceException') !== -1 ||
+        s.indexOf('different serialization layout') !== -1 ||
+        s.indexOf('synchronous Addressable loading') !== -1 ||
+        s.indexOf('Cloud Load Error') !== -1
+    )) return;
+    return _err.apply(this, arguments);
+};
+
+window.addEventListener('unhandledrejection', function (e) { try { e.preventDefault(); } catch (x) {} });
+
+var ZIP_URL = 'https://quizizz.com/_media/uploadedFiles/9ddb97a9-7a0b-4a70-98d3-78cbf7240fe7-v2';
+var PLAYER_AUTH_MODE = 'lite';
+
+var canvas = document.getElementById('unity-canvas');
+var fileMap = new Map();
+
+function setStatus(t) { var el = document.getElementById('loaderStatus'); if (el) el.textContent = t; }
+function setProgress(f) { var el = document.getElementById('loaderBar'); if (el) el.style.width = Math.max(0, Math.min(100, f * 100)) + '%'; }
+function fmtMB(b) { return (b / 1048576).toFixed(1) + ' MB'; }
+function hideLoader() {
+    var el = document.getElementById('loader');
+    if (!el) return;
+    el.style.opacity = '0';
+    el.style.pointerEvents = 'none';
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+}
+
+var MIME = {
+    js: 'application/javascript', mjs: 'application/javascript', json: 'application/json',
+    wasm: 'application/wasm', data: 'application/octet-stream', zip: 'application/zip',
+    bin: 'application/octet-stream', bundle: 'application/octet-stream',
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+    gif: 'image/gif', svg: 'image/svg+xml', ico: 'image/x-icon',
+    mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', opus: 'audio/opus',
+    webm: 'video/webm', mp4: 'video/mp4',
+    ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
+    css: 'text/css', html: 'text/html', txt: 'text/plain',
+    unityweb: 'application/octet-stream', br: 'application/octet-stream'
+};
+function mimeFor(n) {
+    var d = n.lastIndexOf('.');
+    return d < 0 ? 'application/octet-stream' : (MIME[n.substring(d + 1).toLowerCase()] || 'application/octet-stream');
+}
+
+function cleanPath(u) {
+    if (!u) return '';
+    var s = String(u).trim();
+    if (s.indexOf('://') !== -1) { try { s = new URL(s).pathname; } catch (e) {} }
+    s = s.split('?')[0].split('#')[0];
+    while (s.startsWith('../')) s = s.substring(3);
+    while (s.startsWith('./')) s = s.substring(2);
+    s = s.replace(/^\/+/, '');
+    return s.toLowerCase();
+}
+
+function findFileBlob(target) {
+    if (!target || typeof target !== 'string') return null;
+    if (target.startsWith('data:') || target.startsWith('blob:')) return null;
+    var clean = cleanPath(target);
+    if (!clean) return null;
+    if (fileMap.has(clean)) return fileMap.get(clean);
+    var name = clean.split('/').pop();
+    if (!name) return null;
+    var it = fileMap.entries(), e;
+    while (!(e = it.next()).done) {
+        var k = e.value[0], b = e.value[1];
+        if (k === name || k.endsWith('/' + name)) return b;
+    }
+    return null;
+}
+
+function findBuildFile(pattern) {
+    var it = fileMap.entries(), e;
+    while (!(e = it.next()).done) {
+        var k = e.value[0], b = e.value[1];
+        if (pattern.test(k)) return { path: k, blob: b };
+    }
+    return null;
+}
+
+function startsWithAscii(bytes, s) {
+    if (bytes.length < s.length) return false;
+    for (var i = 0; i < s.length; i++) if (bytes[i] !== s.charCodeAt(i)) return false;
+    return true;
+}
+function startsWithBytes(bytes, arr) {
+    if (bytes.length < arr.length) return false;
+    for (var i = 0; i < arr.length; i++) if (bytes[i] !== arr[i]) return false;
+    return true;
+}
+
+function looksAlreadyDecompressed(bytes, filename) {
+    if (!bytes || bytes.length < 4) return false;
+    if (/\.data(\.br|\.unityweb)?$/i.test(filename)) {
+        if (startsWithAscii(bytes, 'UnityWebData')) return true;
+    }
+    if (/\.wasm(\.br|\.unityweb)?$/i.test(filename)) {
+        if (startsWithBytes(bytes, [0x00, 0x61, 0x73, 0x6D])) return true;
+    }
+    if (/\.(framework\.)?js(\.br|\.unityweb)?$/i.test(filename)) {
+        var b0 = bytes[0], b1 = bytes[1];
+        if (b0 === 0x2F && b1 === 0x2A) return true;
+        if (b0 === 0x28 || b0 === 0x21 || b0 === 0x3B) return true;
+        if (b0 === 0x76 && b1 === 0x61) return true;
+        if (b0 === 0x0A || b0 === 0x0D) return true;
+        if (startsWithAscii(bytes, 'var ') || startsWithAscii(bytes, 'const ') || startsWithAscii(bytes, 'let ')) return true;
+        if (startsWithAscii(bytes, 'import ') || startsWithAscii(bytes, 'export ')) return true;
+    }
+    return false;
+}
+
+async function brDecompress(bytes) {
+    if (typeof DecompressionStream !== 'undefined') {
+        try {
+            var ds = new DecompressionStream('br');
+            var stream = new Blob([bytes]).stream().pipeThrough(ds);
+            var out = new Uint8Array(await new Response(stream).arrayBuffer());
+            if (out.length > 0) return out;
+        } catch (e) {}
+    }
+    var mod = await import('https://cdn.jsdelivr.net/npm/brotli-dec-wasm@2.3.2/+esm');
+    var brotli = await mod.default;
+    var s = new brotli.DecompressStream();
+    var parts = [], offset = 0;
+    for (var i = 0; i < 5000; i++) {
+        var r = s.decompress(bytes.slice(offset), 1 << 20);
+        if (r.buf && r.buf.length) parts.push(r.buf);
+        offset += r.input_offset || 0;
+        if (r.code === 1) break;
+        if (r.code === 2) { if (offset >= bytes.length) break; continue; }
+        if (r.code === 3) continue;
+        throw new Error('brotli code=' + r.code);
+    }
+    var total = 0;
+    for (var j = 0; j < parts.length; j++) total += parts[j].length;
+    var merged = new Uint8Array(total);
+    var o = 0;
+    for (var k = 0; k < parts.length; k++) { merged.set(parts[k], o); o += parts[k].length; }
+    return merged;
+}
+
+async function processBr(blob, name) {
+    var bytes = new Uint8Array(await blob.arrayBuffer());
+    if (looksAlreadyDecompressed(bytes, name)) {
+        console.log('[br] ' + name + ' already decompressed');
+        return bytes;
+    }
+    setStatus('Decompressing ' + name.split('/').pop() + '…');
+    try {
+        var dec = await brDecompress(bytes);
+        console.log('[br] ' + name + ' ' + bytes.length + ' -> ' + dec.length);
+        return dec;
+    } catch (e) {
+        console.error('[br] ' + name + ' failed: ' + e.message);
+        return bytes;
+    }
+}
+
+async function processUnityweb(blob, name) {
+    var bytes = new Uint8Array(await blob.arrayBuffer());
+    if (bytes.length >= 2 && bytes[0] === 0x1F && bytes[1] === 0x8B && typeof DecompressionStream !== 'undefined') {
+        try {
+            var ds = new DecompressionStream('gzip');
+            var stream = new Blob([bytes]).stream().pipeThrough(ds);
+            return new Uint8Array(await new Response(stream).arrayBuffer());
+        } catch (e) {}
+    }
+    return bytes;
+}
+
+async function injectBlobScript(text, overrideSrc) {
+    var url = URL.createObjectURL(new Blob([text], { type: 'application/javascript' }));
+    await new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        if (overrideSrc) s.__overrideSrc = overrideSrc;
+        s.src = url;
+        s.onload = resolve;
+        s.onerror = function () { reject(new Error('Failed to inject script')); };
+        document.head.appendChild(s);
+    });
+}
+
+function installYandexStub() {
+    var dataStore = {};
+    try {
+        var saved = localStorage.getItem('__ripped_player_data');
+        if (saved) dataStore = JSON.parse(saved);
+    } catch (e) {}
+
+    var stubPlayer = {
+        getUniqueID: function () { return 'ripped-player'; },
+        getName: function () { return 'Player'; },
+        getPhoto: function () { return ''; },
+        getPhotos: function () { return Promise.resolve({}); },
+        getMode: function () { return PLAYER_AUTH_MODE; },
+        isAuthorized: function () { return PLAYER_AUTH_MODE === 'full'; },
+        getPayingStatus: function () { return 'unknown'; },
+        getSignature: function () { return Promise.resolve(''); },
+        getData: function (keys) {
+            if (!keys) return Promise.resolve({ data: Object.assign({}, dataStore), signature: '' });
+            var out = {};
+            for (var i = 0; i < keys.length; i++) if (keys[i] in dataStore) out[keys[i]] = dataStore[keys[i]];
+            return Promise.resolve({ data: out, signature: '' });
+        },
+        setData: function (d) {
+            if (d) {
+                Object.assign(dataStore, d);
+                try { localStorage.setItem('__ripped_player_data', JSON.stringify(dataStore)); } catch (e) {}
+            }
+            return Promise.resolve();
+        }
+    };
+
+    var stubSdk = {
+        environment: { i18n: { lang: 'en', tld: 'com' }, app: { id: 'ripped' }, browser: { lang: 'en' }, payload: '' },
+        deviceInfo: {
+            type: 'desktop',
+            isMobile: function () { return false; },
+            isDesktop: function () { return true; },
+            isTablet: function () { return false; },
+            isTV: function () { return false; }
+        },
+        screen: {
+            fullscreen: { status: 'off', request: function () { return Promise.resolve(); }, exit: function () { return Promise.resolve(); } },
+            exitFullscreen: function () { return Promise.resolve(); }
+        },
+        adv: {
+            showFullscreenAdv: function (o) {
+                setTimeout(function () {
+                    try { if (o && o.callbacks && o.callbacks.onClose) o.callbacks.onClose(false); } catch (e) {}
+                }, 50);
+            },
+            showRewardedVideo: function (o) {
+                setTimeout(function () {
+                    try { if (o && o.callbacks && o.callbacks.onError) o.callbacks.onError(new Error('no ads')); } catch (e) {}
+                }, 50);
+            },
+            getBannerAdvStatus: function () { return Promise.resolve({ stickyAdvIsShowing: false, reason: '' }); },
+            showBannerAdv: function () { return Promise.resolve(); },
+            hideBannerAdv: function () { return Promise.resolve(); }
+        },
+        feedback: {
+            canReview: function () { return Promise.resolve({ value: false, reason: 'NO_AUTH' }); },
+            requestReview: function () { return Promise.resolve({ feedbackSent: false }); }
+        },
+        shortcut: {
+            canShowPrompt: function () { return Promise.resolve({ canShow: false }); },
+            showPrompt: function () { return Promise.resolve({ outcome: 'rejected' }); }
+        },
+        auth: { openAuthDialog: function () { return Promise.resolve(); } },
+        getPlayer: function () { return Promise.resolve(stubPlayer); },
+        getLeaderboards: function () {
+            return Promise.resolve({
+                setLeaderboardScore: function () { return Promise.resolve(); },
+                getLeaderboardEntries: function () { return Promise.resolve({ entries: [] }); },
+                getLeaderboardDescription: function () {
+                    return Promise.resolve({
+                        default: false,
+                        description: { invert_sort_order: false, score_format: { options: { decimal_offset: 0 } }, type: 'numeric' }
+                    });
+                }
+            });
+        },
+        getPayments: function () {
+            return Promise.resolve({
+                getCatalog: function () { return Promise.resolve([]); },
+                getPurchases: function () { return Promise.resolve([]); },
+                purchase: function () { return Promise.resolve(); },
+                consumePurchase: function () { return Promise.resolve(); }
+            });
+        },
+        getFlags: function () { return Promise.resolve({}); },
+        features: {
+            LoadingAPI: { ready: function () {}, start: function () {}, gameplayStart: function () {}, gameplayStop: function () {} },
+            GameplayAPI: { start: function () {}, stop: function () {} },
+            GamesAPI: {
+                getAllGames: function () { return Promise.resolve({ games: [], developerURL: '' }); },
+                getAllGamesWithDevGames: function () { return Promise.resolve({ games: [], developerURL: '' }); },
+                getDevGames: function () { return Promise.resolve({ games: [], developerURL: '' }); },
+                getGameByGameId: function (id) { return Promise.resolve({ appID: id, title: '', url: '', image: '', description: '', isAuthorized: false }); },
+                isAvailableMethod: function () { return true; }
+            }
+        },
+        storage: {
+            getItem: function () { return Promise.resolve(null); },
+            setItem: function () { return Promise.resolve(); },
+            removeItem: function () { return Promise.resolve(); },
+            clear: function () { return Promise.resolve(); }
+        },
+        on: function () {},
+        off: function () {},
+        serverTime: function () { return Promise.resolve(Date.now()); }
+    };
+
+    window.YaGames = {
+        init: function () { return Promise.resolve(stubSdk); },
+        auth: { openAuthDialog: function () { return Promise.resolve(); } }
+    };
+    window.ysdk = stubSdk;
+    window.player = stubPlayer;
+}
+
+(async function () {
+    try {
+        installYandexStub();
+
+        setStatus('Initializing SDK…');
+        try {
+            var sdk = await YaGames.init();
+            ysdk = sdk;
+            window.ysdk = sdk;
+            FullAdShow();
+            cloudSaves = await LoadCloud();
+            window.cloudSaves = cloudSaves;
+            paymentsData = await GetPayments();
+            window.paymentsData = paymentsData;
+            environmentData = await RequestingEnvironmentData();
+            window.environmentData = environmentData;
+            playerData = await InitPlayer();
+            window.playerData = playerData;
+            flasgsData = 'null';
+            window.flasgsData = 'null';
+        } catch (e) {
+            console.warn('SDK init:', e && e.message);
+        }
+
+        setStatus('Downloading game…');
+        var resp = await fetch(ZIP_URL);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+        var reader = resp.body.getReader();
+        var chunks = [], received = 0;
+        while (true) {
+            var r = await reader.read();
+            if (r.done) break;
+            chunks.push(r.value);
+            received += r.value.length;
+            if (total > 0) {
+                setProgress((received / total) * 0.30);
+                document.getElementById('loaderMB').textContent = fmtMB(received) + ' / ' + fmtMB(total);
+            } else {
+                document.getElementById('loaderMB').textContent = fmtMB(received);
+            }
+        }
+        var buf = new Uint8Array(received);
+        var off = 0;
+        for (var i = 0; i < chunks.length; i++) { buf.set(chunks[i], off); off += chunks[i].length; }
+        chunks.length = 0;
+
+        setStatus('Extracting…');
+        var zip = await JSZip.loadAsync(buf.buffer);
+        var names = Object.keys(zip.files);
+
+        var prefix = '';
+        var probe = names.find(function (n) { return /Build\/[^\/]+\.loader\.js$/i.test(n); });
+        if (probe) {
+            var m = probe.match(/^(.*\/)Build\/[^\/]+\.loader\.js$/i);
+            if (m) prefix = m[1];
+        }
+
+        var entries = [];
+        for (var n = 0; n < names.length; n++) {
+            var nm = names[n];
+            var ent = zip.files[nm];
+            if (ent.dir) continue;
+            var p = nm;
+            if (prefix && p.indexOf(prefix) === 0) p = p.substring(prefix.length);
+            p = p.replace(/^\/+/, '').toLowerCase();
+            if (p) entries.push({ path: p, entry: ent });
+        }
+
+        var done = 0;
+        for (var ei = 0; ei < entries.length; ei++) {
+            var it = entries[ei];
+            var b = await it.entry.async('blob');
+            var bytes, typed;
+            if (/\.unityweb$/i.test(it.path)) {
+                bytes = await processUnityweb(b, it.path);
+                var plainPath = it.path.replace(/\.unityweb$/i, '');
+                typed = new Blob([bytes], { type: mimeFor(plainPath) });
+                fileMap.set(plainPath, typed);
+                fileMap.set(it.path, typed);
+            } else if (/\.br$/i.test(it.path)) {
+                bytes = await processBr(b, it.path);
+                var plainName = it.path.replace(/\.br$/i, '');
+                typed = new Blob([bytes], { type: mimeFor(plainName) });
+                fileMap.set(it.path, typed);
+                fileMap.set(plainName, typed);
+            } else {
+                typed = new Blob([b], { type: mimeFor(it.path) });
+                fileMap.set(it.path, typed);
+            }
+            done++;
+            setProgress(0.30 + (done / entries.length) * 0.30);
+            document.getElementById('loaderMB').textContent = done + ' / ' + entries.length + ' files';
+        }
+
+        var loaderEntry = findBuildFile(/build\/[^\/]+\.loader\.js$/i);
+        var dataEntry = findBuildFile(/build\/[^\/]+\.data(\.unityweb|\.br)?$/i);
+        var frameworkEntry = findBuildFile(/build\/[^\/]+\.framework\.js(\.unityweb|\.br)?$/i);
+        var wasmEntry = findBuildFile(/build\/[^\/]+\.wasm(\.unityweb|\.br)?$/i);
+
+        if (!loaderEntry || !dataEntry || !frameworkEntry || !wasmEntry) {
+            console.log('[debug] fileMap keys:', Array.from(fileMap.keys()));
+            throw new Error('Missing build files: loader=' + !!loaderEntry + ' data=' + !!dataEntry + ' framework=' + !!frameworkEntry + ' wasm=' + !!wasmEntry);
+        }
+
+        console.log('[extract] loader=' + loaderEntry.path + ' data=' + dataEntry.path + ' framework=' + frameworkEntry.path + ' wasm=' + wasmEntry.path);
+
+        var bgBlob = findFileBlob('background.jpg');
+        if (bgBlob) canvas.style.background = 'url(' + URL.createObjectURL(bgBlob) + ') center / cover';
+
+        var nativeFetch = window.fetch;
+        window.fetch = async function (input, init) {
+            var urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+            if (urlStr && !urlStr.startsWith('blob:') && !urlStr.startsWith('data:')) {
+                var blob = findFileBlob(urlStr);
+                if (blob) {
+                    return new Response(blob, {
+                        status: 200,
+                        headers: { 'Content-Type': blob.type || 'application/octet-stream', 'Content-Length': String(blob.size) }
+                    });
+                }
+            }
+            return nativeFetch.apply(this, arguments);
+        };
+
+        var nativeXhrOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (method, url) {
+            if (typeof url === 'string' && !url.startsWith('blob:') && !url.startsWith('data:')) {
+                var blob = findFileBlob(url);
+                if (blob) {
+                    var args = Array.prototype.slice.call(arguments);
+                    args[1] = URL.createObjectURL(blob);
+                    return nativeXhrOpen.apply(this, args);
+                }
+            }
+            return nativeXhrOpen.apply(this, arguments);
+        };
+
+        function patchSrc(proto) {
+            var d = Object.getOwnPropertyDescriptor(proto, 'src');
+            if (!d || !d.set) return;
+            Object.defineProperty(proto, 'src', {
+                configurable: true,
+                enumerable: d.enumerable,
+                get: function () { return this.__overrideSrc || (d.get ? d.get.call(this) : ''); },
+                set: function (v) {
+                    if (typeof v === 'string' && !v.startsWith('blob:') && !v.startsWith('data:')) {
+                        var bl = findFileBlob(v);
+                        if (bl) { d.set.call(this, URL.createObjectURL(bl)); return; }
+                    }
+                    d.set.call(this, v);
+                }
+            });
+        }
+        patchSrc(HTMLImageElement.prototype);
+        patchSrc(HTMLMediaElement.prototype);
+        patchSrc(HTMLSourceElement.prototype);
+        patchSrc(HTMLScriptElement.prototype);
+
+        var nativeSetAttribute = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function (name, value) {
+            if (name && String(name).toLowerCase() === 'src' && typeof value === 'string' && !value.startsWith('blob:') && !value.startsWith('data:')) {
+                var bl = findFileBlob(value);
+                if (bl) value = URL.createObjectURL(bl);
+            }
+            return nativeSetAttribute.call(this, name, value);
+        };
+
+        var NativeWorker = window.Worker;
+        window.Worker = function (url, options) {
+            var urlStr = (url && typeof url.href === 'string') ? url.href : String(url);
+            if (urlStr && !urlStr.startsWith('blob:')) {
+                var bl = findFileBlob(urlStr);
+                if (bl) url = URL.createObjectURL(new Blob([bl], { type: 'application/javascript' }));
+            }
+            return new NativeWorker(url, options);
+        };
+        window.Worker.prototype = NativeWorker.prototype;
+
+        if (Element.prototype.requestPointerLock) {
+            var origReqPL = Element.prototype.requestPointerLock;
+            Element.prototype.requestPointerLock = function () {
+                var args = Array.prototype.slice.call(arguments);
+                try { (args[0] = args[0] || {}).unadjustedMovement = true; } catch (e) {}
+                return origReqPL.apply(this, args);
+            };
+        }
+
+        setStatus('Loading engine…');
+        var loaderText = await loaderEntry.blob.text();
+        if (loaderText.trimStart().startsWith('<')) throw new Error('Loader is HTML, not JS');
+        await injectBlobScript(loaderText, 'https://game.local/Build/' + loaderEntry.path.split('/').pop());
+        if (typeof createUnityInstance !== 'function') throw new Error('createUnityInstance undefined');
+
+        setStatus('Starting game…');
+        var config = {
+            dataUrl: URL.createObjectURL(dataEntry.blob),
+            frameworkUrl: URL.createObjectURL(frameworkEntry.blob),
+            codeUrl: URL.createObjectURL(wasmEntry.blob),
+            streamingAssetsUrl: 'StreamingAssets',
+            companyName: 'DefaultCompany',
+            productName: 'DandyGame',
+            productVersion: '0.1.0'
+        };
+
+        var instance = await createUnityInstance(canvas, config, function (progress) {
+            setProgress(0.60 + progress * 0.39);
+        });
+
+        myGameInstance = instance;
+        window.myGameInstance = instance;
+        setProgress(1);
+        setStatus('Ready');
+        hideLoader();
+        if (window.showMouseLockWarning) window.showMouseLockWarning();
+    } catch (err) {
+        console.error(err);
+        setStatus('Error: ' + (err && err.message ? err.message : String(err)));
+    }
+})();
+})();
+</script>
+
+<script>
+(function () {
+    var canvas = document.getElementById('unity-canvas');
+    var warning = document.getElementById('mouse-lock-warning');
+    var held = false;
+    var wasLocked = false;
+    var suppressWarning = false;
+    var warningTimer;
+
+    function showMouseLockWarning() {
+        clearTimeout(warningTimer);
+        warning.classList.add('visible');
+        warningTimer = setTimeout(function () {
+            warning.classList.remove('visible');
+        }, 5000);
+    }
+    window.showMouseLockWarning = showMouseLockWarning;
+
+    function hideMouseLockWarning() {
+        clearTimeout(warningTimer);
+        warning.classList.remove('visible');
+    }
+
+    function fire(type) {
+        var opts = {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            button: 2,
+            buttons: type === 'mousedown' ? 2 : 0,
+            which: 3,
+            clientX: Math.round(window.innerWidth / 2),
+            clientY: Math.round(window.innerHeight / 2)
+        };
+        try { canvas.dispatchEvent(new MouseEvent(type, opts)); } catch (e) {}
+    }
+
+    function lockPointer() {
+        try { canvas.focus(); } catch (e) {}
+        if (!document.pointerLockElement && canvas.requestPointerLock) {
+            try { canvas.requestPointerLock(); } catch (e) {}
+        }
+    }
+
+    function unlockPointer() {
+        if (document.pointerLockElement) {
+            try { document.exitPointerLock(); } catch (e) {}
+        }
+    }
+
+    function engage() {
+        if (held) return;
+        held = true;
+        hideMouseLockWarning();
+        lockPointer();
+        fire('mousedown');
+    }
+
+    function release() {
+        if (!held) return;
+        held = false;
+        fire('mouseup');
+        suppressWarning = true;
+        unlockPointer();
+    }
+
+    function toggle() {
+        if (held) release(); else engage();
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.repeat) return;
+        if (e.key === 'z' || e.key === 'Z') {
+            toggle();
+        }
+    }, true);
+
+    document.addEventListener('pointerlockchange', function () {
+        var locked = !!document.pointerLockElement;
+        if (wasLocked && !locked && held) {
+            held = false;
+            fire('mouseup');
+        }
+        if (!locked && !suppressWarning) {
+            showMouseLockWarning();
+        }
+        suppressWarning = false;
+        wasLocked = locked;
+    });
+
+    window.addEventListener('blur', function () {
+        if (held) release();
+    });
+})();
+</script>
+</body>
+</html>
