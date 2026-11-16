@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+		<title>Deltarune Yellow</title>
+		<style>
+html, body, #canvas {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+html, body {
+	width: 100%;
+	height: 100%;
+}
+
+body {
+	color: white;
+	background-color: black;
+	overflow: hidden;
+	touch-action: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+#canvas {
+	display: block;
+	image-rendering: pixelated;
+	image-rendering: crisp-edges;
+}
+
+#canvas:focus {
+	outline: none;
+}
+
+#status, #status-splash, #status-progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+}
+
+#status, #status-splash {
+	top: 0;
+	bottom: 0;
+}
+
+#status {
+	background-color: #242424;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	visibility: hidden;
+}
+
+#status-splash {
+	max-height: 100%;
+	max-width: 100%;
+	margin: auto;
+}
+
+#status-splash.show-image--false {
+	display: none;
+}
+
+#status-splash.fullsize--true {
+	height: 100%;
+	width: 100%;
+	object-fit: contain;
+}
+
+#status-splash.use-filter--false {
+	image-rendering: pixelated;
+}
+
+#status-progress, #status-notice {
+	display: none;
+}
+
+#status-progress {
+	bottom: 10%;
+	width: 50%;
+	margin: 0 auto;
+}
+
+#status-notice {
+	background-color: #5b3943;
+	border-radius: 0.5rem;
+	border: 1px solid #9b3943;
+	color: #e0e0e0;
+	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+	line-height: 1.3;
+	margin: 0 2rem;
+	overflow: hidden;
+	padding: 1rem;
+	text-align: center;
+	z-index: 1;
+}
+		</style>
+		<link id="-gd-engine-icon" rel="icon" type="image/png" href="https://quizizz.com/_media/uploads/fb6c8500-750b-43ef-ad0e-894c101a6401-v2" />
+<link rel="apple-touch-icon" href="https://quizizz.com/_media/uploads/fb6c8500-750b-43ef-ad0e-894c101a6401-v2"/>
+	</head>
+	<body>
+		<canvas id="canvas" width="640" height="480">
+			Your browser does not support the canvas tag.
+		</canvas>
+
+		<noscript>
+			Your browser does not support JavaScript.
+		</noscript>
+
+		<div id="status">
+			<img id="status-splash" class="show-image--false fullsize--true use-filter--true" src="https://quizizz.com/_media/uploads/f0e6f551-c38a-47d7-aeaa-5070ac904e26-v2" alt="">
+			<progress id="status-progress"></progress>
+			<div id="status-notice"></div>
+		</div>
+
+		<script>
+if (navigator.serviceWorker && typeof navigator.serviceWorker.getRegistration === "function") {
+	const _origGetReg = navigator.serviceWorker.getRegistration.bind(navigator.serviceWorker);
+	navigator.serviceWorker.getRegistration = function (...args) {
+		try {
+			return _origGetReg(...args).catch(() => null);
+		} catch (e) {
+			return Promise.resolve(null);
+		}
+	};
+}
+
+window.addEventListener("unhandledrejection", function (e) {
+	const r = e.reason;
+	const msg = r && (r.message || String(r));
+	if (r && (r.name === "InvalidStateError" || (typeof msg === "string" && msg.indexOf("ServiceWorkerRegistration") !== -1))) {
+		e.preventDefault();
+	}
+});
+
+(async function () {
+	const RENDER_W = 640;
+	const RENDER_H = 480;
+
+	const Q = "https://quizizz.com/_media/uploads/";
+
+	const ENGINE_JS_URL = Q + "7d50ee3a-a268-4d0b-a122-7e81f75617fe-v2";
+	const AUDIO_WORKLET_URL = Q + "a6a66046-377a-42f8-a347-61214b951ec7-v2";
+	const AUDIO_POSITION_WORKLET_URL = Q + "ae848af9-3c52-4d9a-8f62-a105d5cba91f-v2";
+
+	const PCK_PARTS = [
+		Q + "a9415050-dcf9-4a50-bf2c-cbb5043a62da-v2",
+		Q + "00e3539c-b923-49b3-aebc-83e788de355f-v2",
+		Q + "31f66fe3-d644-4bea-b866-e3a023df280b-v2",
+		Q + "6bd1bcd2-6fab-408c-aa41-d5de43ca9cfc-v2",
+		Q + "3cee2739-e24d-4ef0-84f2-14fa4f9522e8-v2",
+		Q + "83847542-c756-4a3c-bb3d-cb63338a896c-v2"
+	];
+	const WASM_PARTS = [
+		Q + "d32a84cf-e137-44e3-9829-63b0f2fd87be-v2",
+		Q + "6e76ebc2-0973-4a44-aaee-561978e83ef2-v2",
+		Q + "9224e68a-492e-4962-acd8-86d738e7c440-v2"
+	];
+
+	const PCK_SIZE = 107900512;
+	const WASM_SIZE = 43699190;
+
+	const canvas = document.getElementById("canvas");
+
+	function fitCanvas() {
+		const aspect = RENDER_W / RENDER_H;
+		const vw = window.innerWidth;
+		const vh = window.innerHeight;
+		let w, h;
+		if (vw / vh > aspect) {
+			h = vh;
+			w = h * aspect;
+		} else {
+			w = vw;
+			h = w / aspect;
+		}
+		canvas.style.width = Math.floor(w) + "px";
+		canvas.style.height = Math.floor(h) + "px";
+	}
+
+	function pinRenderSize() {
+		if (canvas.width !== RENDER_W) canvas.width = RENDER_W;
+		if (canvas.height !== RENDER_H) canvas.height = RENDER_H;
+	}
+
+	pinRenderSize();
+	fitCanvas();
+	window.addEventListener("resize", fitCanvas);
+	window.addEventListener("orientationchange", fitCanvas);
+
+	const originalFetch = window.fetch.bind(window);
+
+	function concatStream(urls) {
+		let idx = 0;
+		let reader = null;
+		return new ReadableStream({
+			async pull(controller) {
+				try {
+					while (true) {
+						if (!reader) {
+							if (idx >= urls.length) {
+								controller.close();
+								return;
+							}
+							const r = await originalFetch(urls[idx++], { cache: "no-store" });
+							if (!r.ok) throw new Error("Part fetch failed: " + r.status);
+							reader = r.body.getReader();
+						}
+						const { done, value } = await reader.read();
+						if (done) {
+							reader = null;
+							continue;
+						}
+						controller.enqueue(value);
+						return;
+					}
+				} catch (e) {
+					controller.error(e);
+				}
+			}
+		});
+	}
+
+	window.fetch = function (input, init) {
+		let urlStr = "";
+		if (typeof input === "string") urlStr = input;
+		else if (input && input.url) urlStr = input.url;
+
+		if (urlStr && !urlStr.startsWith("blob:") && !urlStr.startsWith("data:")) {
+			const clean = urlStr.split("?")[0].split("#")[0];
+
+			if (/(^|\/)index\.pck$/i.test(clean)) {
+				return Promise.resolve(new Response(concatStream(PCK_PARTS), {
+					status: 200,
+					headers: {
+						"Content-Type": "application/octet-stream",
+						"Content-Length": String(PCK_SIZE)
+					}
+				}));
+			}
+
+			if (/(^|\/)index\.wasm$/i.test(clean)) {
+				return Promise.resolve(new Response(concatStream(WASM_PARTS), {
+					status: 200,
+					headers: {
+						"Content-Type": "application/wasm",
+						"Content-Length": String(WASM_SIZE)
+					}
+				}));
+			}
+		}
+
+		return originalFetch(input, init);
+	};
+
+	if (window.AudioWorklet && AudioWorklet.prototype.addModule) {
+		const originalAddModule = AudioWorklet.prototype.addModule;
+		AudioWorklet.prototype.addModule = async function (moduleURL, options) {
+			const str = typeof moduleURL === "string"
+				? moduleURL
+				: (moduleURL && moduleURL.href ? moduleURL.href : String(moduleURL));
+
+			let replacement = null;
+			if (/index\.audio\.position\.worklet\.js$/i.test(str) || /godot\.audio\.position\.worklet\.js$/i.test(str)) {
+				replacement = AUDIO_POSITION_WORKLET_URL;
+			} else if (/index\.audio\.worklet\.js$/i.test(str) || /godot\.audio\.worklet\.js$/i.test(str)) {
+				replacement = AUDIO_WORKLET_URL;
+			}
+
+			if (!replacement) {
+				return originalAddModule.call(this, moduleURL, options);
+			}
+
+			const r = await originalFetch(replacement, { cache: "no-store" });
+			if (!r.ok) throw new Error("Could not load AudioWorklet: " + r.status);
+
+			const text = await r.text();
+			const blobURL = URL.createObjectURL(new Blob([text], { type: "application/javascript" }));
+			try {
+				return await originalAddModule.call(this, blobURL, options);
+			} finally {
+				setTimeout(() => URL.revokeObjectURL(blobURL), 30000);
+			}
+		};
+	}
+
+	try {
+		const resp = await originalFetch(ENGINE_JS_URL, { cache: "no-store" });
+		if (!resp.ok) throw new Error("Failed to fetch engine: " + resp.status);
+		const engineText = await resp.text();
+		const engineBlobURL = URL.createObjectURL(new Blob([engineText], { type: "application/javascript" }));
+
+		await new Promise((resolve, reject) => {
+			const s = document.createElement("script");
+			s.src = engineBlobURL;
+			s.onload = resolve;
+			s.onerror = () => reject(new Error("Failed to load engine script"));
+			document.head.appendChild(s);
+		});
+
+		if (typeof Engine === "undefined") {
+			throw new Error("Engine global not defined after script load");
+		}
+
+		const GODOT_CONFIG = {
+			"args": [],
+			"canvasResizePolicy": 0,
+			"ensureCrossOriginIsolationHeaders": true,
+			"executable": "index",
+			"experimentalVK": false,
+			"fileSizes": { "index.pck": PCK_SIZE, "index.wasm": WASM_SIZE },
+			"focusCanvas": true,
+			"gdextensionLibs": []
+		};
+		const GODOT_THREADS_ENABLED = false;
+		const engine = new Engine(GODOT_CONFIG);
+
+		(function () {
+			const statusOverlay = document.getElementById('status');
+			const statusProgress = document.getElementById('status-progress');
+			const statusNotice = document.getElementById('status-notice');
+
+			let initializing = true;
+			let statusMode = '';
+
+			function setStatusMode(mode) {
+				if (statusMode === mode || !initializing) {
+					return;
+				}
+				if (mode === 'hidden') {
+					statusOverlay.remove();
+					initializing = false;
+					pinRenderSize();
+					fitCanvas();
+					return;
+				}
+				statusOverlay.style.visibility = 'visible';
+				statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
+				statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
+				statusMode = mode;
+			}
+
+			function setStatusNotice(text) {
+				while (statusNotice.lastChild) {
+					statusNotice.removeChild(statusNotice.lastChild);
+				}
+				const lines = text.split('\n');
+				lines.forEach((line) => {
+					statusNotice.appendChild(document.createTextNode(line));
+					statusNotice.appendChild(document.createElement('br'));
+				});
+			}
+
+			function displayFailureNotice(err) {
+				console.error(err);
+				if (err instanceof Error) {
+					setStatusNotice(err.message);
+				} else if (typeof err === 'string') {
+					setStatusNotice(err);
+				} else {
+					setStatusNotice('An unknown error occurred.');
+				}
+				setStatusMode('notice');
+				initializing = false;
+			}
+
+			const missing = Engine.getMissingFeatures({
+				threads: GODOT_THREADS_ENABLED,
+			});
+
+			if (missing.length !== 0) {
+				if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
+					let serviceWorkerRegistrationPromise;
+					try {
+						serviceWorkerRegistrationPromise = navigator.serviceWorker.getRegistration();
+					} catch (err) {
+						serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
+					}
+					Promise.race([
+						serviceWorkerRegistrationPromise.then((registration) => {
+							if (registration != null) {
+								return Promise.reject(new Error('Service worker already exists.'));
+							}
+							return registration;
+						}).then(() => engine.installServiceWorker()),
+						new Promise((resolve) => {
+							setTimeout(() => resolve(), 2000);
+						}),
+					]).then(() => {
+						window.location.reload();
+					}).catch((err) => {
+						console.error('Error while registering service worker:', err);
+					});
+				} else {
+					const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+					displayFailureNotice(missingMsg + missing.join('\n'));
+				}
+			} else {
+				pinRenderSize();
+				fitCanvas();
+				setStatusMode('progress');
+				engine.startGame({
+					'onProgress': function (current, total) {
+						if (current > 0 && total > 0) {
+							statusProgress.value = current;
+							statusProgress.max = total;
+						} else {
+							statusProgress.removeAttribute('value');
+							statusProgress.removeAttribute('max');
+						}
+					},
+				}).then(() => {
+					pinRenderSize();
+					fitCanvas();
+					setStatusMode('hidden');
+				}, displayFailureNotice);
+			}
+		}());
+	} catch (err) {
+		console.error(err);
+		const notice = document.getElementById('status-notice');
+		const overlay = document.getElementById('status');
+		if (notice && overlay) {
+			overlay.style.visibility = 'visible';
+			notice.style.display = 'block';
+			notice.textContent = err && err.message ? err.message : String(err);
+		}
+	}
+})();
+		</script>
+	</body>
+</html>
