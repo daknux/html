@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Home Meat</title>
+<title>Cloudy Dream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
   html, body {
@@ -65,10 +65,6 @@
 var canvas = document.getElementById('unity-canvas');
 var _realInstance = null;
 var _smQueue = [];
-
-// ============================================
-// GLOBALS — must exist on window before boot
-// ============================================
 var cloudSaves = 'noData';
 var paymentsData = 'none';
 var environmentData = 'null';
@@ -82,10 +78,6 @@ var leaderboard = null;
 var payments = null;
 var initGame = false;
 var nowFullAdOpen = false;
-
-// ============================================
-// INSTANCE PROXY
-// ============================================
 var myGameInstance = {
     SendMessage: function (go, fn, param) {
         if (_realInstance) {
@@ -101,9 +93,6 @@ Object.defineProperty(myGameInstance, 'Module', {
 });
 window.myGameInstance = myGameInstance;
 
-// ============================================
-// YANDEX STUB
-// ============================================
 function makeSyncThenable(value) {
     return {
         then: function (onFulfilled, onRejected) {
@@ -252,9 +241,6 @@ function installYandexStub() {
     window.flasgsData = 'null';
 }
 
-// ============================================
-// PLUGINYG2 VANILLA FUNCTIONS
-// ============================================
 function FocusGame() {
     try { window.focus(); if (canvas) canvas.focus(); } catch (e) {}
 }
@@ -710,9 +696,6 @@ function InitGame() {
     }
 }
 
-// ============================================
-// MIRROR GLOBALS TO WINDOW
-// ============================================
 window.cloudSaves = cloudSaves;
 window.paymentsData = paymentsData;
 window.environmentData = environmentData;
@@ -749,9 +732,6 @@ window.PromptShow = PromptShow;
 window.OpenDeveloperPage = OpenDeveloperPage;
 window.InitGame = InitGame;
 
-// ============================================
-// VISIBILITY + UNLOAD HANDLERS
-// ============================================
 document.addEventListener('visibilitychange', function () {
     if (ysdk !== null && initGame == true) {
         if (document.hidden) {
@@ -772,9 +752,6 @@ window.addEventListener('beforeunload', function () {
     }
 });
 
-// ============================================
-// LOADER STATE
-// ============================================
 function hideLoader() {
     var el = document.getElementById('loader');
     if (!el) return;
