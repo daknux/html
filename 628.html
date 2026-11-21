@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DELTARUNE HALLOWEEN SPECIAL</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; background: #000; }
+  #loader {
+    position: fixed; inset: 0; z-index: 9999;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #000; color: #fff;
+    font-family: system-ui, -apple-system, sans-serif;
+    transition: opacity .4s ease;
+  }
+  #loader .spinner {
+    width: 50px; height: 50px; border-radius: 50%;
+    border: 4px solid rgba(255,255,255,0.1);
+    border-left-color: #09f;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loader .status {
+    margin-top: 16px; font-size: 14px; opacity: 0.85;
+    min-height: 18px; text-align: center; padding: 0 20px;
+  }
+  #loader .bar-wrap {
+    margin-top: 20px;
+    width: 260px; height: 8px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px; overflow: hidden;
+  }
+  #loader .bar {
+    height: 100%; width: 0%; background: #09f;
+    transition: width .15s linear;
+  }
+  #loader .mb {
+    margin-top: 6px; font-size: 12px; opacity: 0.5;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<canvas id="c" width="640" height="480"></canvas>
+<div id="loader">
+  <div class="spinner"></div>
+  <div class="status" id="loaderStatus">Preparing…</div>
+  <div class="bar-wrap"><div class="bar" id="loaderBar"></div></div>
+  <div class="mb" id="loaderMB"></div>
+</div>
+<script>
+'use strict';
+
+(function () {
+    var NativeURL = window.URL;
+    function PatchedURL(url, base) {
+        if (base && typeof base === 'string') {
+            if (base.startsWith('blob:')) base = base.substring(5);
+            if (base.startsWith('data:')) base = location.href;
+        }
+        return new NativeURL(url, base);
+    }
+    PatchedURL.createObjectURL = NativeURL.createObjectURL.bind(NativeURL);
+    PatchedURL.revokeObjectURL = NativeURL.revokeObjectURL.bind(NativeURL);
+    if (NativeURL.canParse) PatchedURL.canParse = NativeURL.canParse;
+    if (NativeURL.parse) PatchedURL.parse = NativeURL.parse;
+    PatchedURL.prototype = NativeURL.prototype;
+    window.URL = PatchedURL;
+})();
+
+var canvas = document.getElementById('c');
+var fileMap = new Map();
+var SPOOKY_BASE = 'webgame/halloween/spooky/together';
+var FAKE_ORIGIN = 'https://game.local/';
+
+function setStatus(t) { var el = document.getElementById('loaderStatus'); if (el) el.textContent = t; }
+function setProgress(f) { var el = document.getElementById('loaderBar'); if (el) el.style.width = Math.max(0, Math.min(100, f * 100)) + '%'; }
+function fmtMB(b) { return (b / 1048576).toFixed(1) + ' MB'; }
+
+function hideLoader() {
+    var el = document.getElementById('loader');
+    if (!el) return;
+    el.style.opacity = '0';
+    el.style.pointerEvents = 'none';
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+}
+
+function cleanPath(u) {
+    if (!u) return '';
+    var s = String(u).trim();
+    if (s.startsWith('blob:')) s = s.substring(5);
+    if (s.indexOf('://') !== -1) { try { s = new URL(s).pathname; } catch (e) {} }
+    s = s.split('?')[0].split('#')[0];
+    while (s.startsWith('../')) s = s.substring(3);
+    while (s.startsWith('./')) s = s.substring(2);
+    s = s.replace(/^\/+/, '');
+    return s.toLowerCase();
+}
+
+function resolveFilePath(target) {
+    if (!target || typeof target !== 'string') return null;
+    if (target.startsWith('data:')) return null;
+    var clean = cleanPath(target);
+    if (!clean) return null;
+    if (fileMap.has(clean)) return clean;
+    var name = clean.split('/').pop();
+    if (!name) return null;
+    var it = fileMap.entries(), e;
+    while (!(e = it.next()).done) {
+        var k = e.value[0];
+        if (k === name || k.endsWith('/' + name)) return k;
+    }
+    return null;
+}
+
+function findFileBlob(target) {
+    var p = resolveFilePath(target);
+    return p ? fileMap.get(p) : null;
+}
+
+function resolvePath(rel, base) {
+    if (!rel) return base;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(rel)) return rel;
+    if (rel.startsWith('/')) return rel.replace(/^\/+/, '');
+    var baseParts = base.replace(/\/+$/, '').split('/').filter(Boolean);
+    var parts = rel.split('/');
+    for (var i = 0; i < parts.length; i++) {
+        var p = parts[i];
+        if (p === '..') baseParts.pop();
+        else if (p !== '.' && p !== '') baseParts.push(p);
+    }
+    return baseParts.join('/');
+}
+
+var MIME = {
+    js: 'application/javascript', mjs: 'application/javascript', json: 'application/json',
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+    gif: 'image/gif', svg: 'image/svg+xml', ico: 'image/x-icon',
+    mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', opus: 'audio/opus',
+    webm: 'video/webm', mp4: 'video/mp4',
+    ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
+    css: 'text/css', html: 'text/html', txt: 'text/plain'
+};
+function mimeFor(n) {
+    var d = n.lastIndexOf('.');
+    return d < 0 ? 'application/octet-stream' : (MIME[n.substring(d + 1).toLowerCase()] || 'application/octet-stream');
+}
+
+function injectBlobScript(text, overrideSrc) {
+    return new Promise(function (resolve, reject) {
+        var blob = new Blob([text], { type: 'application/javascript' });
+        var url = URL.createObjectURL(blob);
+        var s = document.createElement('script');
+        if (overrideSrc) s.__overrideSrc = overrideSrc;
+        s.src = url;
+        s.onload = function () { URL.revokeObjectURL(url); resolve(); };
+        s.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Failed to load script: ' + (overrideSrc || url))); };
+        document.head.appendChild(s);
+    });
+}
+
+(async function () {
+    try {
+        var ZIP_URL = 'https://quizizz.com/_media/uploadedFiles/e750c684-cbc9-4145-999f-a6acd56641d5-v2';
+
+        setStatus('Downloading game…');
+        var resp = await fetch(ZIP_URL);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+        var reader = resp.body.getReader();
+        var chunks = [], received = 0;
+        while (true) {
+            var r = await reader.read();
+            if (r.done) break;
+            chunks.push(r.value);
+            received += r.value.length;
+            if (total > 0) {
+                setProgress((received / total) * 0.5);
+                document.getElementById('loaderMB').textContent = fmtMB(received) + ' / ' + fmtMB(total);
+            } else {
+                document.getElementById('loaderMB').textContent = fmtMB(received);
+            }
+        }
+        var buf = new Uint8Array(received);
+        var off = 0;
+        for (var i = 0; i < chunks.length; i++) { buf.set(chunks[i], off); off += chunks[i].length; }
+        chunks.length = 0;
+
+        setStatus('Extracting…');
+        var zip = await JSZip.loadAsync(buf.buffer);
+        var names = Object.keys(zip.files);
+        var done = 0;
+        for (var n = 0; n < names.length; n++) {
+            var nm = names[n];
+            var ent = zip.files[nm];
+            if (ent.dir) continue;
+            var p = nm;
+            if (p.indexOf('game/') === 0) p = p.substring(5);
+            p = p.replace(/^\/+/, '');
+            if (!p) continue;
+            var b = await ent.async('blob');
+            var typed = new Blob([b], { type: mimeFor(p) });
+            fileMap.set(p.toLowerCase(), typed);
+            done++;
+            setProgress(0.5 + (done / names.length) * 0.3);
+            document.getElementById('loaderMB').textContent = done + ' / ' + names.length + ' files';
+        }
+
+        var base = document.createElement('base');
+        base.href = 'webgame/halloween/spooky/together/';
+        document.head.appendChild(base);
+
+        var nativeFetch = window.fetch;
+        window.fetch = async function (input, init) {
+            var urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+            if (urlStr && !urlStr.startsWith('blob:') && !urlStr.startsWith('data:')) {
+                var blob = findFileBlob(urlStr);
+                if (blob) {
+                    return new Response(blob, {
+                        status: 200,
+                        headers: { 'Content-Type': blob.type || 'application/octet-stream', 'Content-Length': String(blob.size) }
+                    });
+                }
+            }
+            return nativeFetch.apply(this, arguments);
+        };
+
+        var nativeXhrOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (method, url) {
+            if (typeof url === 'string' && !url.startsWith('blob:') && !url.startsWith('data:')) {
+                var blob = findFileBlob(url);
+                if (blob) {
+                    var args = Array.prototype.slice.call(arguments);
+                    args[1] = URL.createObjectURL(blob);
+                    return nativeXhrOpen.apply(this, args);
+                }
+            }
+            return nativeXhrOpen.apply(this, arguments);
+        };
+
+        function patchSrc(proto) {
+            var d = Object.getOwnPropertyDescriptor(proto, 'src');
+            if (!d || !d.set) return;
+            Object.defineProperty(proto, 'src', {
+                configurable: true, enumerable: d.enumerable,
+                get: function () { return this.__overrideSrc || (d.get ? d.get.call(this) : ''); },
+                set: function (v) {
+                    if (typeof v === 'string' && !v.startsWith('blob:') && !v.startsWith('data:')) {
+                        var resolved = resolveFilePath(v);
+                        if (resolved) {
+                            if (this.tagName === 'SCRIPT') this.__overrideSrc = FAKE_ORIGIN + resolved;
+                            d.set.call(this, URL.createObjectURL(fileMap.get(resolved)));
+                            return;
+                        }
+                    }
+                    d.set.call(this, v);
+                }
+            });
+        }
+        patchSrc(HTMLImageElement.prototype);
+        patchSrc(HTMLMediaElement.prototype);
+        patchSrc(HTMLSourceElement.prototype);
+        patchSrc(HTMLScriptElement.prototype);
+
+        var nativeSetAttribute = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function (name, value) {
+            if (name && String(name).toLowerCase() === 'src' && typeof value === 'string' && !value.startsWith('blob:') && !value.startsWith('data:')) {
+                var resolved = resolveFilePath(value);
+                if (resolved) {
+                    if (this.tagName === 'SCRIPT') this.__overrideSrc = FAKE_ORIGIN + resolved;
+                    value = URL.createObjectURL(fileMap.get(resolved));
+                }
+            }
+            return nativeSetAttribute.call(this, name, value);
+        };
+
+        var NativeWorker = window.Worker;
+        window.Worker = function (url, options) {
+            var urlStr = (url && typeof url.href === 'string') ? url.href : String(url);
+            if (urlStr && !urlStr.startsWith('blob:')) {
+                var bl = findFileBlob(urlStr);
+                if (bl) url = URL.createObjectURL(new Blob([bl], { type: 'application/javascript' }));
+            }
+            return new NativeWorker(url, options);
+        };
+        window.Worker.prototype = NativeWorker.prototype;
+
+        setStatus('Loading engine…');
+        var scripts = [
+            '../../../../battles/fourth_cage/cage_data.js',
+            'data_engine.js',
+            '../../../../sound/code/sfx.js',
+            '../../../../music/code/sideb-music.js',
+            'engine.js',
+            'sound.js',
+            'title.js',
+            'parts.js',
+            '../../night/night.js',
+            '../../night/parts.js',
+            '../../night/map.js'
+        ];
+
+        for (var si = 0; si < scripts.length; si++) {
+            var src = scripts[si];
+            var srcAbs = resolvePath(src, SPOOKY_BASE);
+            var overrideSrc = FAKE_ORIGIN + srcAbs;
+            var blob = fileMap.get(srcAbs);
+            if (!blob) {
+                console.warn('[loader] missing script: ' + srcAbs);
+                continue;
+            }
+            var text = await blob.text();
+            await injectBlobScript(text, overrideSrc);
+            setProgress(0.8 + ((si + 1) / scripts.length) * 0.18);
+        }
+
+        setStatus('Starting game…');
+        setProgress(0.99);
+        SPOOKY.boot(canvas);
+        window.__test = SPOOKY.test;
+
+        setProgress(1);
+        setStatus('Ready');
+        hideLoader();
+
+    } catch (err) {
+        console.error(err);
+        setStatus('Error: ' + (err && err.message ? err.message : String(err)));
+    }
+})();
+</script>
+</body>
+</html>
