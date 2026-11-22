@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DELTARUNE: Forecasted</title>
+<style>
+html,body {
+  width:100%;
+  height:100%;
+  margin:0;
+  overflow:hidden;
+  background:#000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overscroll-behavior:none;
+  touch-action:none;
+}#canvas {
+  display:block;
+  background:#000;
+  image-rendering:pixelated;
+  image-rendering:crisp-edges;
+  outline:none;
+}#spinner {
+  display:none;
+}#loading-screen {
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  background:#000;
+  color:#e8e8f0;
+  gap:14px;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  transition:opacity .5s ease;
+}#loading-screen.hidden {
+  opacity:0;
+  pointer-events:none;
+}#loading-screen .title {
+  font-size:18px;
+  font-weight:600;
+  letter-spacing:.5px;
+}#loading-screen .status {
+  font-size:13px;
+  color:#99a;
+  min-height:18px;
+  text-align:center;
+  padding:0 20px;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  max-width:95vw;
+}#loading-screen .bar-wrap {
+  width:min(420px,80vw);
+  height:8px;
+  background:#0a1a2a;
+  border-radius:4px;
+  overflow:hidden;
+}#loading-screen .bar {
+  height:100%;
+  width:0%;
+  background:#09f;
+  transition:width .15s ease;
+}#loading-screen .mb {
+  font-size:12px;
+  color:#778;
+  font-variant-numeric:tabular-nums;
+}#loading-screen .credit {
+  position:absolute;
+  bottom:16px;
+  font-size:12px;
+  color:#778;
+  letter-spacing:.5px;
+}#loading-screen .spin {
+  width:34px;
+  height:34px;
+  border-radius:50%;
+  border:3px solid #0a1a2a;
+  border-top-color:#09f;
+  animation:spin 1s linear infinite;
+}
+@keyframes spin{to {
+  transform:rotate(360deg);
+}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+  <div id="loading-screen">
+    <div class="spin"></div>
+    <div class="title">DELTARUNE: Forecasted</div>
+    <div class="status" id="status">Preparing…</div>
+    <div class="bar-wrap">
+      <div class="bar" id="bar"></div>
+    </div>
+    <div class="mb" id="mb"></div>
+    <div class="credit">Web Port by RalseiRals</div>
+  </div>
+  <canvas id="canvas" tabindex="0"></canvas>
+  <div id="spinner" class="pending"></div>
+<script>
+(async function(){
+'use strict';
+const ENGINE_ZIP='https://quizizz.com/_media/uploadedFiles/7e610380-c290-4e83-998b-cf3ec4e1d02a-v2';
+const GAME_URL='https://quizizz.com/_media/uploadedFiles/560c4a7a-ef4b-4bc2-b027-26ccde3946a6-v2';
+const GAME_FILE='forecasted.love';
+const status=document.getElementById('status'),bar=document.getElementById('bar'),mb=document.getElementById('mb'),loading=document.getElementById('loading-screen');
+const canvas=document.getElementById('canvas');
+let started=false;
+const fileMap=new Map(),blobUrls=new Map();
+function report(t){status.textContent=t;console.log('[Forecasted Restoration]',t)}
+function fail(e){console.error(e);status.textContent='Error: '+String(e&&e.message||e);mb.textContent='See browser console for details.';loading.querySelector('.spin').style.display='none';started=false}
+function setProgress(f){bar.style.width=Math.max(0,Math.min(100,f*100))+'%'}
+function fmtMB(n){return (n/1048576).toFixed(1)+' MB'}
+async function download(url,label){
+ report('Downloading '+label+'…');setProgress(0);mb.textContent='';
+ const response=await fetch(url);if(!response.ok)throw Error(label+' HTTP '+response.status);
+ const total=Number(response.headers.get('content-length'))||0;
+ if(!response.body||!response.body.getReader){const data=await response.blob();setProgress(1);mb.textContent=fmtMB(data.size);return data}
+ const reader=response.body.getReader(),chunks=[];let received=0;
+ while(true){const {done,value}=await reader.read();if(done)break;chunks.push(value);received+=value.byteLength;if(total)setProgress(received/total);mb.textContent=fmtMB(received)+(total?' / '+fmtMB(total):'')}
+ setProgress(1);return new Blob(chunks,{type:'application/octet-stream'});
+}
+function hideLoading(){if(loading.classList.contains('hidden'))return;loading.classList.add('hidden');setTimeout(()=>loading.remove(),600)}
+
+function urlFor(blob){if(!blobUrls.has(blob))blobUrls.set(blob,URL.createObjectURL(blob));return blobUrls.get(blob)}
+function mime(p){return /\.js$/i.test(p)?'application/javascript':/\.wasm$/i.test(p)?'application/wasm':/\.css$/i.test(p)?'text/css':/\.json$/i.test(p)?'application/json':'application/octet-stream'}
+function normalize(s){if(!s)return '';s=String(s);if(/^blob:|^data:/i.test(s))return '';try{if(/^https?:/i.test(s))s=new URL(s).pathname}catch(e){}return s.split(/[?#]/)[0].replace(/^\/+|^\.\//g,'').toLowerCase()}
+function findBlob(path){let k=normalize(path);if(!k)return null;if(fileMap.has(k))return fileMap.get(k);let name=k.split('/').pop();for(const [key,b] of fileMap)if(key===name||key.endsWith('/'+name))return b;return null}
+function resize(){let w=640,h=480;const ratio=Math.min(innerWidth/w,innerHeight/h);canvas.style.width=Math.floor(w*ratio)+'px';canvas.style.height=Math.floor(h*ratio)+'px'}
+addEventListener('resize',resize);resize();
+function loadScript(text,virtual){return new Promise((resolve,reject)=>{let s=document.createElement('script');s.__overrideSrc=virtual;s.src=urlFor(new Blob([text],{type:'application/javascript'}));s.onload=resolve;s.onerror=()=>reject(new Error('Script load failed: '+virtual));document.body.appendChild(s)})}
+function patchIO(){
+const originalFetch=window.fetch;window.fetch=function(input,init){let url=typeof input==='string'?input:input&&input.url;let b=findBlob(url);if(b)return Promise.resolve(new Response(b,{status:200,headers:{'Content-Type':b.type||'application/octet-stream'}}));return originalFetch.apply(this,arguments)};
+const originalOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(method,url,...args){let b=findBlob(url);return originalOpen.call(this,method,b?urlFor(b):url,...args)};
+const nativeWorker=window.Worker;if(nativeWorker){window.Worker=function(url,options){let b=findBlob(url&&url.href||url);return new nativeWorker(b?urlFor(b):url,options)};window.Worker.prototype=nativeWorker.prototype}
+const desc=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,'src');if(desc&&desc.set){Object.defineProperty(HTMLScriptElement.prototype,'src',{configurable:true,get(){return this.__overrideSrc||desc.get.call(this)},set(v){const b=findBlob(v);desc.set.call(this,b?urlFor(b):v)}})}
+const setAttr=Element.prototype.setAttribute;Element.prototype.setAttribute=function(n,v){if(String(n).toLowerCase()==='src'){const b=findBlob(v);if(b)v=urlFor(b)}return setAttr.call(this,n,v)};
+}
+  function stripLuaNoise(src) {
+    return src.replace(/--\[(=*)\[[\s\S]*?\]\1\]/g, '').replace(/--[^\n]*/g, '')
+              .replace(/\[(=*)\[[\s\S]*?\]\1\]/g, '')
+              .replace(/"(?:\\.|[^"\\])*"/g, '""').replace(/'(?:\\.|[^'\\])*'/g, "''");
+  }
+
+  function isBalancedLuaSnippet(snippet) {
+    const clean = stripLuaNoise(snippet);
+    return (clean.match(/\b(?:function|if|do|repeat)\b/g) || []).length === (clean.match(/\b(?:end|until)\b/g) || []).length;
+  }
+
+  function transformGotoContinue(source) {
+    let result = source.replace(/\r\n/g, '\n');
+    let searchFrom = 0, iterations = 0, handled = 0;
+    while (iterations++ < 500) {
+      const rest = result.slice(searchFrom);
+      const gotoMatch = /\bgoto\s+continue\b/.exec(rest);
+      if (!gotoMatch) break;
+      const gotoPos = searchFrom + gotoMatch.index;
+      const gotoEnd = gotoPos + gotoMatch[0].length;
+      const beforeGoto = result.slice(0, gotoPos);
+      const ifRe = /\bif\b/g;
+      const ifPositions = [];
+      let m;
+      while ((m = ifRe.exec(beforeGoto)) !== null) ifPositions.push(m.index);
+      let ifPos = -1, thenPos = -1;
+      for (let k = ifPositions.length - 1; k >= 0; k--) {
+        const cand = ifPositions[k];
+        const tIdx = result.indexOf('then', cand);
+        if (tIdx < 0 || tIdx >= gotoPos) continue;
+        if (!/^\s*$/.test(result.slice(tIdx + 4, gotoPos))) continue;
+        ifPos = cand; thenPos = tIdx; break;
+      }
+      if (ifPos < 0) { searchFrom = gotoEnd; continue; }
+      const afterGoto = result.slice(gotoEnd);
+      const endMatch = /^\s*end\b/.exec(afterGoto);
+      if (!endMatch) { searchFrom = gotoEnd; continue; }
+      const ifEndPos = gotoEnd + endMatch[0].length;
+      const labelIdx = result.indexOf('::continue::', ifEndPos);
+      if (labelIdx < 0) { searchFrom = gotoEnd; continue; }
+      const condition = result.slice(ifPos + 2, thenPos).trim();
+      const body = result.slice(ifEndPos, labelIdx);
+      if (/\bgoto\s+continue\b/.test(body)) { searchFrom = gotoEnd; continue; }
+      if (!isBalancedLuaSnippet(body)) { searchFrom = gotoEnd; continue; }
+      const baseIndent = result.slice(ifPos).match(/^[ \t]*/)[0];
+      const bodyIndented = body.replace(/\s+$/, '').split('\n').map(line => line.trim() ? '    ' + line : line).join('\n');
+      result = result.slice(0, ifPos) + `if not (${condition}) then\n${bodyIndented}\n${baseIndent}end` + result.slice(labelIdx + '::continue::'.length);
+      handled++;
+      searchFrom = 0;
+    }
+    return { result, handled, leftover: /\bgoto\s+continue\b/.test(result) };
+  }
+
+  function promoteNestedLongStrings(src) {
+    const n = src.length;
+    const out = [];
+    let i = 0;
+    let lastCopy = 0;
+    let changed = false;
+    while (i < n) {
+      const c = src[i];
+      if (c === '-' && i + 1 < n && src[i + 1] === '-') {
+        if (i + 2 < n && src[i + 2] === '[') {
+          const m = /^\[(=*)\[/.exec(src.slice(i + 2));
+          if (m) {
+            const level = m[1].length;
+            const close = ']' + '='.repeat(level) + ']';
+            const openLen = 1 + level + 1;
+            let j = i + 2 + openLen;
+            while (j < n && !src.startsWith(close, j)) j++;
+            if (j < n) { i = j + close.length; continue; }
+          }
+        }
+        let j = i + 2;
+        while (j < n && src[j] !== '\n') j++;
+        i = j;
+        continue;
+      }
+      if (c === '"' || c === "'") {
+        const quote = c;
+        let j = i + 1;
+        while (j < n) {
+          if (src[j] === '\\') { j += 2; continue; }
+          if (src[j] === quote || src[j] === '\n') { j++; break; }
+          j++;
+        }
+        i = j;
+        continue;
+      }
+      if (c === '[') {
+        const m = /^\[(=*)\[/.exec(src.slice(i));
+        if (m) {
+          const level = m[1].length;
+          const close = ']' + '='.repeat(level) + ']';
+          const openLen = 1 + level + 1;
+          let j = i + openLen;
+          while (j < n && !src.startsWith(close, j)) j++;
+          if (j < n) {
+            const content = src.slice(i + openLen, j);
+            if (content.includes('[[')) {
+              let newLevel = level + 1;
+              while (newLevel < 30) {
+                const newClose = ']' + '='.repeat(newLevel) + ']';
+                const newOpen = '[' + '='.repeat(newLevel) + '[';
+                if (!content.includes(newClose) && !content.includes(newOpen)) break;
+                newLevel++;
+              }
+              if (lastCopy < i) out.push(src.slice(lastCopy, i));
+              out.push('[' + '='.repeat(newLevel) + '[' + content + ']' + '='.repeat(newLevel) + ']');
+              lastCopy = j + close.length;
+              changed = true;
+            }
+            i = j + close.length;
+            continue;
+          }
+        }
+      }
+      i++;
+    }
+    if (!changed) return { result: src, changed: false };
+    if (lastCopy < n) out.push(src.slice(lastCopy));
+    return { result: out.join(''), changed: true };
+  }
+
+function patchNestedGotoContinue(src){
+  const re=/(if i == 0 then\s*\n[ \t]+table\.insert\(assign_randomly, wave\)\s*\n)[ \t]+goto continue\s*\n([ \t]+)end\s*\n([\s\S]*?)\n([ \t]+)end\s*\n([ \t]+)end\s*\n([ \t]+)::continue::/g;
+  return src.replace(re,(m,prefix,innerIndent,middle,midEndIndent,outerEndIndent)=>
+    prefix+innerIndent+'else\n'+middle+'\n'+midEndIndent+'end\n'+innerIndent+'end\n'+outerEndIndent+'end');
+}
+
+function patchTrailingGuardContinue(src){
+ const re=/^([ \t]*)if[ \t]+([^\n]+?)[ \t]+then[^\n]*\n[ \t]*goto[ \t]+continue[ \t]*(?:--[^\n]*)?\n[ \t]*end[ \t]*(?:--[^\n]*)?\n([\s\S]*?)^([ \t]*)::continue::[^\n]*\n(?=[ \t]*end\b)/gm;
+ return src.replace(re,(whole,indent,condition,body,labelIndent)=>{
+   if(indent!==labelIndent || /\bgoto\s+continue\b|::continue::/.test(body))return whole;
+   if(!isBalancedLuaSnippet(body))return whole;
+   return indent+'if not ('+condition.trim()+') then\n'+body+indent+'end\n';
+ });
+}
+
+async function patchLuaSources(archive){
+ const paths=Object.keys(archive.files).filter(p=>/\.lua$/i.test(p)&&!archive.files[p].dir);
+ let changed=0, unresolved=[];
+ for(let i=0;i<paths.length;i++){
+  const path=paths[i], entry=archive.file(path);
+  let source=await entry.async('string');
+  if(!/\bgoto\s+continue\b|\[\[/.test(source))continue;
+  let result=source;
+  if(/\bgoto\s+continue\b/.test(result)){
+   const transformed=transformGotoContinue(result);
+   result=transformed.result;
+   if(transformed.leftover){
+     result=patchNestedGotoContinue(result);
+     if(/\bgoto\s+continue\b/.test(result))result=patchTrailingGuardContinue(result);
+     if(/\bgoto\s+continue\b/.test(result))unresolved.push(path);
+   }
+  }
+  if(result.includes('[['))result=promoteNestedLongStrings(result).result;
+  if(result!==source){archive.file(path,result);changed++}
+  if(i%40===0)report('Scanning Lua compatibility… '+(i+1)+'/'+paths.length);
+ }
+ console.log('[Kristal Player] Lua compatibility files patched:',changed,'unresolved goto files:',unresolved);
+ if(unresolved.length){console.warn('[Kristal Player] Some Lua goto constructs could not be safely rewritten:',unresolved);report('Warning: unsupported Lua goto syntax in '+unresolved.length+' file(s)');}
+ return {changed,unresolved};
+}
+
+async function getEngine(){const buf=await download(ENGINE_ZIP,'LÖVE 11.5 runtime');report('Extracting runtime…');setProgress(0);mb.textContent='';const z=await JSZip.loadAsync(buf);for(const [name,entry] of Object.entries(z.files)){if(entry.dir)continue;const path=name.toLowerCase();if(!(/(^|\/)player\.js$|(^|\/)love\.(js|wasm)$|(^|\/)normalize[12]\.lua$|(^|\/)nogame\.love$|(^|\/)style\.css$|(^|\/)audio\.worklet\.js$/i.test(path)))continue;const b=await entry.async('blob');fileMap.set(path,new Blob([b],{type:mime(path)}))}if(!findBlob('player.js')||!findBlob('11.5/love.js')||!findBlob('11.5/love.wasm'))throw Error('The runtime ZIP is missing player.js or LÖVE 11.5 engine files')}
+let gameFaviconURL=null;
+let pendingGameFaviconURL=null;
+const initialPlayerTitle=document.title;
+let gameTitleActivated=true;
+function activateGameFavicon(){
+  if(!pendingGameFaviconURL)return;
+  let link=document.getElementById('game-favicon');
+  if(!link){link=document.createElement('link');link.id='game-favicon';link.rel='icon';document.head.appendChild(link);}
+  link.href=pendingGameFaviconURL;
+  if(gameFaviconURL)URL.revokeObjectURL(gameFaviconURL);
+  gameFaviconURL=pendingGameFaviconURL;
+  pendingGameFaviconURL=null;
+  console.log('[Kristal Player] Applied game favicon after game title loaded.');
+}
+new MutationObserver(()=>{
+  if(document.title!==initialPlayerTitle && document.title.trim()){
+    gameTitleActivated=true;
+    activateGameFavicon();
+  }
+}).observe(document.querySelector('title'),{childList:true,characterData:true,subtree:true});
+async function setGameFavicon(zip){
+  const files=Object.values(zip.files).filter(e=>!e.dir);
+  const ranked=[];
+  for(const entry of files){
+    const name=entry.name.replace(/\\/g,'/').toLowerCase();
+    if(!/\.(ico|png|webp|jpg|jpeg)$/.test(name))continue;
+    const base=name.split('/').pop();
+    let score=-1;
+    if(base==='icon.ico')score=100;
+    else if(base==='icon.png')score=95;
+    else if(base==='favicon.ico')score=94;
+    else if(base==='favicon.png')score=93;
+    else if(base==='game.ico'||base==='game.png')score=90;
+    else if(base==='logo.png' && name.split('/').length<=3)score=40;
+    if(score<0)continue;
+    if(/^assets\/(?:images\/)?/.test(name))score+=2;
+    if(name.startsWith('mods/'))score-=35;
+    ranked.push({entry,score});
+  }
+  ranked.sort((a,b)=>b.score-a.score || a.entry.name.length-b.entry.name.length);
+  for(const {entry} of ranked){
+    try{
+      const ext=entry.name.split('.').pop().toLowerCase();
+      const type=ext==='ico'?'image/x-icon':ext==='png'?'image/png':ext==='webp'?'image/webp':'image/jpeg';
+      const bytes=await entry.async('uint8array');
+      if(bytes.byteLength>8*1024*1024)continue;
+      const url=URL.createObjectURL(new Blob([bytes],{type}));
+      if(pendingGameFaviconURL)URL.revokeObjectURL(pendingGameFaviconURL);
+      pendingGameFaviconURL=url;
+      activateGameFavicon();
+      console.log('[Kristal Player] Prepared browser tab icon:',entry.name);
+      return;
+    }catch(e){console.warn('[Kristal Player] Could not read game icon:',entry.name,e)}
+  }
+  console.log('[Kristal Player] No bundled game icon found; keeping default tab icon.');
+}
+function findZipStart(bytes){for(let i=0;i+4<=bytes.length;i++)if(bytes[i]===80&&bytes[i+1]===75&&bytes[i+2]===3&&bytes[i+3]===4)return i;return -1}
+async function loadGame(file){report('Reading '+file.name+'…');let start=-1;for(let offset=0;offset<file.size;offset+=1048576){const bytes=new Uint8Array(await file.slice(offset,Math.min(file.size,offset+1048576+3)).arrayBuffer());const found=findZipStart(bytes);if(found>=0){start=offset+found;break}if(offset>0&&offset%16777216===0)report('Scanning EXE for embedded LÖVE archive… '+Math.round(offset/file.size*100)+'%')}if(start<0)throw Error('No ZIP/LÖVE archive found in the file. Only fused .exe files containing a .love archive are supported.');let game=new Blob([file.slice(start)],{type:'application/octet-stream'});let zip;try{zip=await JSZip.loadAsync(game)}catch(e){throw Error('The embedded game ZIP is invalid or unsupported: '+e.message)}await setGameFavicon(zip);const names=Object.keys(zip.files);const main=names.find(n=>/(^|\/)main\.lua$/i.test(n));if(!main)throw Error('No main.lua found. This is not a runnable .love game.');
+let prefix=main.slice(0,main.length-'main.lua'.length);if(prefix){report('Normalizing game archive…');const clean=new JSZip();for(const [name,entry] of Object.entries(zip.files)){if(entry.dir||!name.startsWith(prefix))continue;clean.file(name.slice(prefix.length),await entry.async('uint8array'))}game=await clean.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:1}})}
+else if(start)game=new Blob([file.slice(start)],{type:'application/octet-stream'});
+report('Applying general LÖVE compatibility patches…');const patched=await JSZip.loadAsync(game);
+const sourceLib=Object.keys(patched.files).filter(n=>n.startsWith('src/lib/')&&!patched.files[n].dir);
+const rootLib=Object.keys(patched.files).some(n=>n.startsWith('lib/'));
+if(sourceLib.length&&!rootLib){
+  report('Mounting Kristal library compatibility paths ('+sourceLib.length+' files)…');
+  patched.folder('lib');
+  for(const name of sourceLib){
+    patched.file('lib/'+name.slice('src/lib/'.length),await patched.file(name).async('uint8array'));
+  }
+  console.log('[Kristal Player] Created lib/ alias from src/lib/');
+}
+let shaderCount=0;
+for(const path of Object.keys(patched.files)){
+  if(!/\.(?:glsl|frag|vert|fs|vs)$/i.test(path)||patched.files[path].dir)continue;
+  const entry=patched.file(path);
+  const source=await entry.async('string');
+  const fixed=source.replace(/\b(uniform|extern)(\s+)(float|int|bool|vec[234])(\s+)([A-Za-z_]\w*)(\s*=\s*)(vec[234]\s*\([^;]*?\)|[-+]?\d+(?:\.\d+)?)(\s*;)/g,
+    (full,qual,ws,kind,space,name,eq,value,semi)=>
+      qual+ws+kind+space+name+semi+' // __kristal_uniform_default '+name+' '+value);
+  if(fixed!==source){patched.file(path,fixed);shaderCount++}
+}
+if(shaderCount)report('Fixed WebGL uniform initializers in '+shaderCount+' shader file(s)…');
+report('Applying original loader Lua syntax compatibility…');
+await patchLuaSources(patched);
+const kristalEntry=patched.file('src/kristal.lua');
+if(kristalEntry){
+  const originalKristal=await kristalEntry.async('string');
+  const safeKristal=originalKristal.replace(
+    'local split = Utils.split(msg, ": ")',
+    'local split = Utils.split(msg, ": ")\n    if #split < 2 then split = {"unknown", tostring(msg)} end'
+  );
+  if(safeKristal!==originalKristal){patched.file('src/kristal.lua',safeKristal);console.log('[Kristal Player] Hardened Kristal error display');}
+}
+for(const path of Object.keys(patched.files)){
+  if(!/^(?:mods\/)?[^\n]*scripts\/world\/cutscenes\/forest\.lua$/i.test(path))continue;
+  const entry=patched.file(path);
+  if(!entry || entry.dir)continue;
+  const source=await entry.async('string');
+  const fixed=source.replace(/(^[ \t]*)cutscene:wait\(0\.01\)([ \t]*$)/gm,'$1return false$2');
+  if(fixed!==source){
+    patched.file(path,fixed);
+    console.log('[Kristal Player] Fixed non-yieldable wait predicates in',path,
+      '('+(source.match(/cutscene:wait\(0\.01\)/g)||[]).length+' replacements)');
+  }
+}
+const oldMain=await patched.file('main.lua').async('string');if(!oldMain.includes('__kristal_player_compat'))patched.file('main.lua',`-- __kristal_player_compat\n`+GENERIC_SHIM+'\n'+oldMain);
+const norm=findBlob('lua/normalize1.lua');if(norm){let s=await norm.text();if(!s.includes('__loader_fd_paths'))fileMap.set('lua/normalize1.lua',new Blob([s+'\n'+NORMALIZE_COMPAT],{type:'text/plain'}))}
+if(!patched.file('ffi.lua'))patched.file('ffi.lua',FFI_STUB);
+for(const suffix of ['so','dll','dylib','']){const name='lib/discord_game_sdk'+(suffix?'.'+suffix:'');if(!patched.file(name))patched.file(name,'')}
+const out=await patched.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:1}},p=>{setProgress(p.percent/100);mb.textContent='Preparing game… '+Math.round(p.percent)+'%'});
+console.log('[Kristal Player] Archive folders:',Object.keys(patched.files).filter(n=>patched.files[n].dir&&(/^(lib|src\/lib)\/?$/.test(n))));
+const gameName='selected.love';fileMap.set(gameName,new Blob([out],{type:'application/octet-stream'}));
+return gameName}
+const GENERIC_SHIM="-- Lua 5.2 package.searchpath compatibility for the Lua 5.1 web runtime.\n-- Uses the LÖVE virtual filesystem first, because game files are in a .love archive.\nif type(package.searchpath) ~= \"function\" then\n    function package.searchpath(name, path, sep, rep)\n        assert(type(name) == \"string\", \"bad argument #1 to 'searchpath' (string expected)\")\n        assert(type(path) == \"string\", \"bad argument #2 to 'searchpath' (string expected)\")\n        sep = sep or \".\"\n        rep = rep or \"/\"\n        if sep ~= \"\" then\n            local escaped = sep:gsub(\"(%W)\", \"%%%1\")\n            name = name:gsub(escaped, function() return rep end)\n        end\n        local errors = {}\n        for template in (path .. \";\"):gmatch(\"(.-);\") do\n            if template ~= \"\" then\n                local filename = template:gsub(\"%?\", function() return name end)\n                local found = false\n                if love and love.filesystem then\n                    if love.filesystem.getInfo then\n                        local ok, info = pcall(love.filesystem.getInfo, filename, \"file\")\n                        found = ok and info ~= nil\n                    elseif love.filesystem.exists then\n                        local ok, exists = pcall(love.filesystem.exists, filename)\n                        found = ok and exists\n                    end\n                end\n                if not found and io and io.open then\n                    local ok, f = pcall(io.open, filename, \"rb\")\n                    if ok and f then f:close(); found = true end\n                end\n                if found then return filename end\n                errors[#errors + 1] = \"\\n\\tno file '\" .. filename .. \"'\"\n            end\n        end\n        return nil, table.concat(errors)\n    end\nend\n\nif not bit then\n    bit = (function()\n        local b = {}\n        local floor = math.floor\n        local function norm(x)\n            x = x % 4294967296\n            if x < 0 then x = x + 4294967296 end\n            return x\n        end\n        local function signed(x)\n            x = norm(x)\n            if x >= 2147483648 then return x - 4294967296 end\n            return x\n        end\n        b.tobit = signed\n        local band_nib, bor_nib, bxor_nib = {}, {}, {}\n        for i = 0, 15 do\n            band_nib[i], bor_nib[i], bxor_nib[i] = {}, {}, {}\n            for j = 0, 15 do\n                local a, c, p = i, j, 1\n                local r_and, r_or, r_xor = 0, 0, 0\n                for _ = 1, 4 do\n                    local ab = a % 2\n                    local cb = c % 2\n                    if ab == 1 and cb == 1 then r_and = r_and + p end\n                    if ab == 1 or cb == 1 then r_or = r_or + p end\n                    if ab ~= cb then r_xor = r_xor + p end\n                    a = (a - ab) / 2\n                    c = (c - cb) / 2\n                    p = p * 2\n                end\n                band_nib[i][j] = r_and\n                bor_nib[i][j] = r_or\n                bxor_nib[i][j] = r_xor\n            end\n        end\n        local function op32(a, c, table_)\n            local result = 0\n            local mult = 1\n            for _ = 1, 8 do\n                local an = a % 16\n                local cn = c % 16\n                result = result + table_[an][cn] * mult\n                a = (a - an) / 16\n                c = (c - cn) / 16\n                mult = mult * 16\n            end\n            return result\n        end\n        function b.band(a, c)\n            if c == nil then return signed(norm(a)) end\n            return signed(op32(norm(a), norm(c), band_nib))\n        end\n        function b.bor(a, c)\n            if c == nil then return signed(norm(a)) end\n            return signed(op32(norm(a), norm(c), bor_nib))\n        end\n        function b.bxor(a, c)\n            if c == nil then return signed(norm(a)) end\n            return signed(op32(norm(a), norm(c), bxor_nib))\n        end\n        function b.bnot(a) return signed(4294967295 - norm(a)) end\n        function b.lshift(a, n)\n            if n < 0 then return b.rshift(a, -n) end\n            if n >= 32 then return 0 end\n            return signed((norm(a) * 2^n) % 4294967296)\n        end\n        function b.rshift(a, n)\n            if n < 0 then return b.lshift(a, -n) end\n            if n >= 32 then return 0 end\n            return signed(floor(norm(a) / 2^n))\n        end\n        function b.arshift(a, n)\n            if n < 0 then return b.lshift(a, -n) end\n            if n >= 32 then return signed(a) < 0 and -1 or 0 end\n            return signed(floor(signed(a) / 2^n))\n        end\n        function b.rol(a, n)\n            n = n % 32\n            if n < 0 then n = n + 32 end\n            local na = norm(a)\n            return signed((na * 2^n + floor(na / 2^(32 - n))) % 4294967296)\n        end\n        function b.ror(a, n)\n            n = n % 32\n            if n < 0 then n = n + 32 end\n            local na = norm(a)\n            return signed((floor(na / 2^n) + na * 2^(32 - n)) % 4294967296)\n        end\n        function b.bswap(a)\n            a = norm(a)\n            local b1 = a % 256; a = floor(a / 256)\n            local b2 = a % 256; a = floor(a / 256)\n            local b3 = a % 256; a = floor(a / 256)\n            local b4 = a % 256\n            return signed(b1 * 16777216 + b2 * 65536 + b3 * 256 + b4)\n        end\n        function b.tohex(a, n)\n            n = n or 8\n            if n < 0 then\n                n = -n\n                return string.upper(string.format(\"%0\" .. n .. \"x\", norm(a))):sub(-n)\n            end\n            return string.format(\"%0\" .. n .. \"x\", norm(a)):sub(-n)\n        end\n        return b\n    end)()\n    package.loaded.bit = bit\n    package.preload.bit = function() return bit end\nend\n\nif not table.unpack then table.unpack = unpack end\n\nif love and love.thread and not __loader_thread_shimmed then\n    __loader_thread_shimmed = true\n    local _channels = {}\n    local _threads = {}\n    local function _pump_all()\n        for i = 1, #_threads do\n            local t = _threads[i]\n            if t and t._pump then t:_pump() end\n        end\n    end\n    local function _mkch(name)\n        if name and _channels[name] then return _channels[name] end\n        local buf = {}\n        local ch = { _name = name }\n        function ch:push(v) table.insert(buf, v); _pump_all() end\n        function ch:supply(v) self:push(v) end\n        function ch:pop() return table.remove(buf, 1) end\n        function ch:demand()\n            while #buf == 0 do\n                local co = coroutine.running()\n                if co then coroutine.yield() else return nil end\n            end\n            return table.remove(buf, 1)\n        end\n        function ch:peek() return buf[1] end\n        function ch:getCount() return #buf end\n        function ch:clear() for i = #buf, 1, -1 do buf[i] = nil end end\n        function ch:performAtomic() end\n        if name then _channels[name] = ch end\n        return ch\n    end\n    local function _mkthr(source)\n        local t = {}\n        local co\n        local chunk\n        local _error\n        if type(source) == \"string\" then\n            local ok, loaded = pcall(love.filesystem.load, source)\n            if ok then chunk = loaded else _error = loaded end\n        elseif type(source) == \"function\" then chunk = source\n        else _error = \"unsupported source type: \" .. type(source) end\n        function t:_pump()\n            if not co or coroutine.status(co) ~= \"suspended\" then return end\n            local ok, err = coroutine.resume(co)\n            if not ok then\n                print(\"[loader] SYNC THREAD ERROR: \" .. tostring(err))\n                _error = err\n            end\n        end\n        function t:start(...)\n            if _error or not chunk then return end\n            co = coroutine.create(chunk)\n            table.insert(_threads, t)\n            t:_pump()\n        end\n        function t:wait()\n            while co and coroutine.status(co) ~= \"dead\" do\n                t:_pump()\n                if not co or coroutine.status(co) == \"dead\" then break end\n                if coroutine.running() then coroutine.yield() end\n                if not co then break end\n            end\n        end\n        function t:isRunning() return co ~= nil and coroutine.status(co) ~= \"dead\" end\n        function t:getError() return _error end\n        return t\n    end\n    love.thread.newThread = function(source) return _mkthr(source) end\n    love.thread.newChannel = function(name) return _mkch(name) end\n    love.thread.getChannel = function(name) return _mkch(name) end\nend\n\nif love and love.image and not __loader_imagedata_shimmed then\n    __loader_imagedata_shimmed = true\n    local __orig_newImageData = love.image.newImageData\n    love.image.newImageData = function(a, b, c)\n        local ok, result = pcall(__orig_newImageData, a, b, c)\n        if ok and result ~= nil then return result end\n        if a == nil or type(a) == \"string\" then\n            local ok2, blank = pcall(__orig_newImageData, 1, 1)\n            if ok2 and blank then return blank end\n        end\n        if not ok then error(result) end\n        return result\n    end\nend\n\nif love and love.graphics and not __loader_gfx_shimmed then\n    __loader_gfx_shimmed = true\n    local __orig_newFont = love.graphics.newFont\n    local __orig_newImageFont = love.graphics.newImageFont\n    local __orig_newImage = love.graphics.newImage\n    local __orig_setFont = love.graphics.setFont\n    local __img_placeholder = nil\n    local __main_ttf_path = \"assets/fonts/main.ttf\"\n\n    local function __path_exists(p)\n        if love.filesystem.getInfo then\n            local ok, info = pcall(love.filesystem.getInfo, p)\n            if ok then return info ~= nil end\n        end\n        if love.filesystem.exists then\n            local ok, exists = pcall(love.filesystem.exists, p)\n            if ok then return exists end\n        end\n        return true\n    end\n\n    local function __make_placeholder()\n        if __img_placeholder then return __img_placeholder end\n        local ok, data = pcall(love.image.newImageData, 1, 1)\n        if ok and data then\n            local ok2, img = pcall(__orig_newImage, data)\n            if ok2 and img then __img_placeholder = img end\n        end\n        return __img_placeholder\n    end\n\n    love.graphics.newImage = function(a, ...)\n        if type(a) == \"string\" and not __path_exists(a) then\n            error(\"Could not open file \" .. a .. \". Does not exist.\")\n        end\n        local ok, result = pcall(__orig_newImage, a, ...)\n        if ok and result ~= nil then return result end\n        local ph = __make_placeholder()\n        if ph then return ph end\n        error(tostring(result))\n    end\n\n    love.graphics.newFont = function(a, b, c, d)\n        if type(a) == \"userdata\" then\n            local ok_fd, f_fd\n            if d == nil then ok_fd, f_fd = pcall(__orig_newFont, a, b, c)\n            else ok_fd, f_fd = pcall(__orig_newFont, a, b, c, d) end\n            if ok_fd and f_fd then return f_fd end\n            if c ~= nil then\n                local ok_nh, f_nh = pcall(__orig_newFont, a, b)\n                if ok_nh and f_nh then return f_nh end\n            end\n            local paths = rawget(_G, \"__loader_fd_paths\")\n            if paths and paths[a] then\n                local p = paths[a]\n                local ok_p, f_p\n                if d == nil then ok_p, f_p = pcall(__orig_newFont, p, b, c)\n                else ok_p, f_p = pcall(__orig_newFont, p, b, c, d) end\n                if ok_p and f_p then return f_p end\n                local ok_np, f_np = pcall(__orig_newFont, p, b)\n                if ok_np and f_np then return f_np end\n            end\n            local ok_m, f_m\n            if d == nil then ok_m, f_m = pcall(__orig_newFont, __main_ttf_path, b, c)\n            else ok_m, f_m = pcall(__orig_newFont, __main_ttf_path, b, c, d) end\n            if ok_m and f_m then return f_m end\n            local ok_m2, f_m2 = pcall(__orig_newFont, __main_ttf_path, b)\n            if ok_m2 and f_m2 then return f_m2 end\n        else\n            local ok, result\n            if d == nil then ok, result = pcall(__orig_newFont, a, b, c)\n            else ok, result = pcall(__orig_newFont, a, b, c, d) end\n            if ok and result ~= nil then return result end\n            if c ~= nil and b ~= nil then\n                local ok2, r2 = pcall(__orig_newFont, a, b)\n                if ok2 and r2 then return r2 end\n            end\n            if type(b) == \"number\" then\n                local ok3, f3 = pcall(__orig_newFont, __main_ttf_path, b)\n                if ok3 and f3 then return f3 end\n            end\n        end\n        return nil\n    end\n\n    love.graphics.newImageFont = function(a, b, c)\n        local ok, result = pcall(__orig_newImageFont, a, b, c)\n        if ok and result ~= nil then return result end\n        return nil\n    end\n\n    love.graphics.setFont = function(font)\n        if font == nil then\n            local ok, f = pcall(__orig_newFont, __main_ttf_path, 12)\n            if ok and f then return __orig_setFont(f) end\n            return\n        end\n        return __orig_setFont(font)\n    end\nend\n\nif love and love.graphics and not __loader_shader_shimmed then\n    __loader_shader_shimmed = true\n    local __orig_newShader = love.graphics.newShader\n    local function __parse_expr(expr)\n        if type(expr) ~= \"string\" then return nil end\n        expr = expr:match(\"^%s*(.-)%s*$\")\n        local n = tonumber(expr)\n        if n then return n end\n        local vn, vargs = expr:match(\"^vec([234])%s*%((.-)%)$\")\n        if vn then\n            local args = {}\n            for a in vargs:gmatch(\"[^,]+\") do\n                local an = tonumber(a:match(\"^%s*(.-)%s*$\"))\n                if not an then return nil end\n                args[#args + 1] = an\n            end\n            if #args == tonumber(vn) then return args end\n        end\n        return nil\n    end\n    local function __patch_shader(code)\n        if type(code) ~= \"string\" then return code, {} end\n        local defaults = {}\n        -- Archive-level GLSL compatibility preserves uniform defaults as comments.\n        for name, expr in code:gmatch(\"__kristal_uniform_default%s+([%w_]+)%s+([^\\r\\n]+)\") do\n            defaults[#defaults + 1] = { name = name, expr = expr }\n        end\n        local patched = code:gsub(\"(extern%s+)int(%s+%w+)\", \"%1float%2\")\n        patched = patched:gsub(\"(uniform%s+)int(%s+%w+)\", \"%1float%2\")\n        patched = patched:gsub(\"(extern%s+[%w_]+%s+)([%w_]+)(%s*=%s*)([^;]+)(%s*;)\", function(prefix, name, eq, expr, semi)\n            defaults[#defaults + 1] = { name = name, expr = expr }\n            return prefix .. name .. semi\n        end)\n        patched = patched:gsub(\"(uniform%s+[%w_]+%s+)([%w_]+)(%s*=%s*)([^;]+)(%s*;)\", function(prefix, name, eq, expr, semi)\n            defaults[#defaults + 1] = { name = name, expr = expr }\n            return prefix .. name .. semi\n        end)\n        -- GLSL ES 1.00 requires float literals for floating-point division and\n        -- float-valued min/max/clamp expressions. Only rewrite numeric constants\n        -- in shader text, never Lua code or arbitrary archive assets.\n        -- Ignore comments to avoid altering commented-out shader examples.\n        local function fix_line(line)\n            local body, comment = line:match(\"^(.-)(//.*)$\")\n            if not body then body, comment = line, \"\" end\n            body = body:gsub(\"(/%s*)(%d+)(%f[^%w%.])\", function(op, n, boundary)\n                return op .. n .. \".0\" .. boundary\n            end)\n            -- Convert integer min/max arguments where the other operand is a\n            -- floating-point expression (coordinates, sin, division, etc.).\n            body = body:gsub(\"(%f[%a]m[ia][nx]%s*%(%s*)([01])(%s*,)\", function(pre, n, comma)\n                return pre .. n .. \".0\" .. comma\n            end)\n            body = body:gsub(\"(%f[%a]m[ia][nx]%s*%(%s*[^,]-%,%s*)([01])(%s*%)\", function(pre, n, close)\n                return pre .. n .. \".0\" .. close\n            end)\n            return body .. comment\n        end\n        patched = patched:gsub(\"[^\\n]+\", fix_line)\n        return patched, defaults\n    end\n    local function __apply_defaults(shader, defaults)\n        if not shader or not defaults then return end\n        for i = 1, #defaults do\n            local d = defaults[i]\n            local v = __parse_expr(d.expr)\n            if type(v) == \"number\" then\n                pcall(shader.send, shader, d.name, v)\n            elseif type(v) == \"table\" then\n                pcall(shader.send, shader, d.name, unpack(v))\n            end\n        end\n    end\n    -- Report shader source and caller only when shader compilation fails.\n    local function __shader_source_lines(source, label)\n        if type(source) ~= \"string\" then\n            print(\"[Kristal Shader Debug] \" .. label .. \" is \" .. type(source) .. \": \" .. tostring(source))\n            return\n        end\n        print(\"[Kristal Shader Debug] \" .. label .. \" (\" .. #source .. \" bytes):\")\n        local line_no = 0\n        for line in (source .. \"\\n\"):gmatch(\"(.-)\\n\") do\n            line_no = line_no + 1\n            print(string.format(\"[Kristal Shader Debug] %s %04d | %s\", label, line_no, line))\n        end\n    end\n    local function __shader_fail(err, original_a, original_b, patched_a, patched_b, caller)\n        print(\"[Kristal Shader Debug] ===== SHADER COMPILATION FAILED =====\")\n        print(\"[Kristal Shader Debug] Error: \" .. tostring(err))\n        print(\"[Kristal Shader Debug] Called from: \" .. tostring(caller))\n        __shader_source_lines(original_a, \"original pixel/first\")\n        if original_b ~= nil then __shader_source_lines(original_b, \"original vertex/second\") end\n        if original_a ~= patched_a then __shader_source_lines(patched_a, \"patched pixel/first\") end\n        if original_b ~= patched_b then __shader_source_lines(patched_b, \"patched vertex/second\") end\n        if debug and debug.traceback then\n            print(\"[Kristal Shader Debug] Stack trace: \" .. debug.traceback(\"\", 3))\n        end\n        print(\"[Kristal Shader Debug] ===== END SHADER DIAGNOSTICS =====\")\n        error(err, 0)\n    end\n    love.graphics.newShader = function(a, b, ...)\n        local caller = \"unknown\"\n        if debug and debug.getinfo then\n            local info = debug.getinfo(2, \"Sl\")\n            if info then caller = tostring(info.short_src or info.source) .. \":\" .. tostring(info.currentline) end\n        end\n        local pa, da = __patch_shader(a)\n        local pb, db = __patch_shader(b)\n        local ok, shader\n        if b == nil then\n            ok, shader = pcall(__orig_newShader, pa, ...)\n        else\n            ok, shader = pcall(__orig_newShader, pa, pb, ...)\n        end\n        if not ok then __shader_fail(shader, a, b, pa, pb, caller) end\n        __apply_defaults(shader, da)\n        __apply_defaults(shader, db)\n        return shader\n    end\nend\n\n\n-- Kristal font compatibility: prefer bundled fonts and their configured sizes.\ndo\n    local __native_require = require\n    local __font_recovery_installed = {}\n    local function __font_from_assets(path, size)\n        if not (love and love.graphics and love.graphics.newFont) then return nil end\n        local s = tonumber(size) or 12\n        local candidates = {}\n        if type(path) == \"string\" then\n            if path:match(\"%.ttf$\") or path:match(\"%.otf$\") then\n                candidates[#candidates + 1] = path\n            else\n                candidates[#candidates + 1] = \"assets/fonts/\" .. path .. \".ttf\"\n                candidates[#candidates + 1] = \"assets/fonts/\" .. path .. \".otf\"\n            end\n        end\n        candidates[#candidates + 1] = \"assets/fonts/main.ttf\"\n        for _, candidate in ipairs(candidates) do\n            for _, hint in ipairs({\"mono\", \"normal\", \"none\", \"light\"}) do\n                local ok, font = pcall(love.graphics.newFont, candidate, s, hint)\n                if ok and font then return font end\n            end\n            local ok, font = pcall(love.graphics.newFont, candidate, s)\n            if ok and font then return font end\n        end\n        local ok, font = pcall(love.graphics.newFont, s)\n        if ok and font then return font end\n        return nil\n    end\n    require = function(name)\n        local module = __native_require(name)\n        if name == \"src.engine.assets\" and type(module) == \"table\" and not __font_recovery_installed.assets then\n            __font_recovery_installed.assets = true\n            if type(module.getFont) == \"function\" then\n                local original = module.getFont\n                module.getFont = function(path, size)\n                    if type(path) ~= \"string\" then return original(path, size) end\n                    local ok, font = pcall(original, path, size)\n                    if ok and font then return font end\n                    local s = tonumber(size) or 12\n                    local data = module.data\n                    if data then\n                        local settings = (data.font_settings and data.font_settings[path]) or {}\n                        local entry = data.fonts and data.fonts[path]\n                        local default = 12\n                        if type(entry) == \"table\" and entry.default then\n                            default = entry.default\n                        elseif settings.defaultSize then\n                            default = settings.defaultSize\n                        end\n                        if settings.autoScale then s = default\n                        else s = tonumber(size) or default end\n                    end\n                    return __font_from_assets(path, s)\n                end\n            end\n        end\n        if name == \"src.engine.menu.mainmenu\" and type(module) == \"table\" and not __font_recovery_installed.mainmenu then\n            __font_recovery_installed.mainmenu = true\n            if type(module.drawVersion) == \"function\" then\n                local original = module.drawVersion\n                module.drawVersion = function(self, ...)\n                    if type(self) == \"table\" and not self.small_font then\n                        self.small_font = __font_from_assets(\"small\", 12)\n                    end\n                    return original(self, ...)\n                end\n            end\n        end\n        return module\n    end\nend\n";
+const NORMALIZE_COMPAT="-- [LOADER] newFileData compat + FileData\u2192path tracking\n__loader_fd_paths = __loader_fd_paths or {}\ndo\n    if type(_lfs_newFile) == \"function\" then\n        local __orig_lfs = _lfs_newFile\n        _lfs_newFile = function(fn, arg, ...)\n            if fn == nil then return nil end\n            if arg == nil and type(fn) == \"string\" then\n                local contents = love.filesystem.read(fn)\n                if contents then\n                    local fd = __orig_lfs(contents, fn)\n                    if fd and type(fd) == \"userdata\" then __loader_fd_paths[fd] = fn end\n                    return fd\n                end\n                return nil, \"newFile: not found: \" .. fn\n            end\n            return __orig_lfs(fn, arg, ...)\n        end\n    end\n    local __orig_nfd = love.filesystem.newFileData\n    if type(__orig_nfd) == \"function\" then\n        love.filesystem.newFileData = function(a, b, ...)\n            if a == nil then return nil, \"newFileData: nil first arg\" end\n            if b == nil and type(a) == \"string\" then\n                local contents = love.filesystem.read(a)\n                if contents then\n                    local fd = __orig_nfd(contents, a)\n                    if fd and type(fd) == \"userdata\" then __loader_fd_paths[fd] = a end\n                    return fd\n                end\n                return nil, \"newFileData: not found: \" .. a\n            end\n            return __orig_nfd(a, b, ...)\n        end\n    end\nend\n";
+const FFI_STUB="local ffi = {C={},os=\"Web\",arch=\"wasm\"}\nffi.cdef=function() end\nffi.load=function() return nil end\nffi.new=function(_,v) return v or {} end\nffi.cast=function(_,v) return v end\nffi.string=tostring\nffi.sizeof=function() return 0 end\nffi.abi=function() return false end\nreturn ffi\n";
+async function start(){if(started)return;started=true;try{
+ if(typeof JSZip==='undefined')throw Error('JSZip failed to load. Check your internet connection.');
+ await getEngine();
+ const gameBlob=await download(GAME_URL,'game archive');
+ const gameFile=new File([gameBlob],GAME_FILE,{type:'application/octet-stream'});
+ setProgress(0);mb.textContent='';
+ const gameName=await loadGame(gameFile);
+ setProgress(1);patchIO();report('Starting LÖVE engine…');
+ let player=await findBlob('player.js').text();
+ const memoryFormula='Module.INITIAL_MEMORY = Math.min(4*cache[uri].length + 2e+7, memory);';
+ if(!player.includes(memoryFormula))throw Error('Unexpected player.js runtime: cannot safely apply memory allocation fix');
+ player=player.replace(memoryFormula,`// Adaptive initial heap with WebAssembly memory growth.
+ var requestedHeap = 4*cache[uri].length + 2e+7;
+ var initialHeap = Math.min(512*1024*1024, Math.max(128*1024*1024, Math.min(requestedHeap, memory)));
+ Module.INITIAL_MEMORY = Math.ceil(initialHeap / 65536) * 65536;`);
+ await loadScript(player,'https://love.local/player.js?v=11.5&n=1&g='+encodeURIComponent(gameName));
+ report('Waiting for game initialization…');
+ const checkCanvas=()=>{resize();if(canvas.width>300||canvas.height>150)hideLoading()};
+ new MutationObserver(checkCanvas).observe(canvas,{attributes:true,attributeFilter:['width','height']});
+ checkCanvas();setTimeout(hideLoading,4000);
+ canvas.focus();
+ }catch(e){fail(e)}
+}
+start();
+})().catch(console.error);
+</script>
+</body>
+</html>
