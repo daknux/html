@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mom Hid My Game!</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #111;
+            font-family: Arial, sans-serif;
+        }
+
+        #loading {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #f5e5c8;
+            color: #483528;
+            transition: opacity .5s ease;
+        }
+
+        #loading h1 {
+            font-size: clamp(28px, 6vw, 52px);
+            text-align: center;
+            margin: 0 15px 12px;
+        }
+
+        #loading p {
+            font-size: 16px;
+            margin: 10px;
+        }
+
+        .loader {
+            width: 190px;
+            height: 9px;
+            background: #d2b99b;
+            border-radius: 20px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+
+        #progress {
+            width: 0%;
+            height: 100%;
+            background: #a66a3f;
+            transition: width .2s;
+        }
+
+        #game {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+        }
+
+        ruffle-player {
+            width: 100%;
+            height: 100%;
+        }
+
+        #error {
+            display: none;
+            color: #a33;
+            margin: 20px;
+            text-align: center;
+        }
+
+        .fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="loading">
+        <h1>Mom Hid My Game!</h1>
+        <p id="status">Preparing game...</p>
+
+        <div class="loader">
+            <div id="progress"></div>
+        </div>
+
+        <p id="percentage">0%</p>
+        <div id="error"></div>
+    </div>
+
+    <div id="game"></div>
+
+    <!-- Official Ruffle CDN -->
+    <script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
+
+    <script>
+        const BASE_URL =
+            "https://rawcdn.githack.com/linkawaken1979-alt/Mom-hid-my-Game-Web-edition/main/";
+
+        const loading = document.getElementById("loading");
+        const progress = document.getElementById("progress");
+        const percentage = document.getElementById("percentage");
+        const status = document.getElementById("status");
+        const error = document.getElementById("error");
+        const game = document.getElementById("game");
+
+        function updateProgress(value, message) {
+            progress.style.width = value + "%";
+            percentage.textContent = Math.floor(value) + "%";
+
+            if (message) {
+                status.textContent = message;
+            }
+        }
+
+        function showError(message) {
+            status.textContent = "Unable to load game";
+            error.style.display = "block";
+            error.textContent = message;
+            percentage.style.display = "none";
+            progress.parentElement.style.display = "none";
+        }
+
+        async function startGame() {
+            try {
+                updateProgress(10, "Initializing Ruffle...");
+
+                if (!window.RufflePlayer) {
+                    throw new Error("Ruffle failed to initialize. Check your internet connection.");
+                }
+
+                const ruffle = window.RufflePlayer.newest();
+
+                updateProgress(30, "Creating game player...");
+
+                const player = ruffle.createPlayer();
+
+                player.style.width = "100%";
+                player.style.height = "100%";
+
+                game.appendChild(player);
+
+                updateProgress(50, "Loading Mom Hid My Game...");
+
+                await player.load({
+                    url: BASE_URL + "mom.swf",
+                    base: BASE_URL,
+                    autoplay: "on",
+                    backgroundColor: "#000000",
+                    letterbox: "on",
+                    allowScriptAccess: false
+                });
+
+                updateProgress(100, "Game ready!");
+
+                setTimeout(() => {
+                    loading.classList.add("fade-out");
+
+                    setTimeout(() => {
+                        loading.remove();
+                    }, 600);
+                }, 400);
+
+            } catch (e) {
+                console.error(e);
+                showError(e.message || "Unknown loading error");
+            }
+        }
+
+        startGame();
+    </script>
+
+</body>
+
+</html>
